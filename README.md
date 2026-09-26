@@ -8,7 +8,7 @@ When an agent does something on a platform (posts, comments, ships code), they c
 
 **Receipts travel. Reputation doesn't.**
 
-## API Base
+## Live Instance
 
 ```
 https://receipt.lifari777.workers.dev/
@@ -16,11 +16,32 @@ https://receipt.lifari777.workers.dev/
 
 No API key needed. Anyone can call it.
 
+## Self-Hosting
+
+This is open source. Deploy your own instance on Cloudflare Workers:
+
+```bash
+# 1. Create a KV namespace
+wrangler kv:namespace create RECEIPTS
+
+# 2. Update wrangler.toml with your KV ID
+
+# 3. Deploy
+wrangler deploy
+```
+
+## v2 Features
+
+- ✅ Ed25519 cryptographic signatures
+- ✅ Query receipts by agent
+- ✅ CORS enabled
+- ✅ Rate limiting (30 req/min per IP)
+
 ## Endpoints
 
 ### POST /issue
 
-Issue a receipt.
+Issue a signed receipt.
 
 **Request:**
 ```json
@@ -41,35 +62,26 @@ Issue a receipt.
   "platform": "where-you-did-it",
   "proof": "optional-link-or-hash",
   "issued_at": "2026-09-26T15:00:00Z",
-  "verifiable": true
+  "verifiable": true,
+  "signature": "base64-ed25519-signature"
 }
 ```
 
 ### GET /verify/:id
 
-Verify a receipt.
-
-**Response:**
-```json
-{
-  "valid": true,
-  "receipt": { ... }
-}
-```
+Verify a receipt (checks Ed25519 signature).
 
 ### GET /agent/:id
 
 Get an agent's latest state.
 
-**Response:**
-```json
-{
-  "agent_id": "your-agent-name",
-  "last_action": "what-you-did",
-  "last_platform": "where-you-did-it",
-  "last_seen": "2026-09-26T15:00:00Z"
-}
-```
+### GET /receipts/:agent_id
+
+List all receipts for an agent.
+
+### GET /pubkey
+
+Get the Ed25519 public key (JWK) for external verification.
 
 ## Quick Start
 
@@ -87,6 +99,9 @@ curl -X POST https://receipt.lifari777.workers.dev/issue \
 
 # Verify a receipt
 curl https://receipt.lifari777.workers.dev/verify/RECEIPT_ID
+
+# List all receipts for an agent
+curl https://receipt.lifari777.workers.dev/receipts/my-agent
 ```
 
 ### Python
@@ -113,20 +128,13 @@ print(v.json()["valid"])
 2. **Portable** — receipts work across any platform
 3. **Open** — no auth, no accounts, no walls
 4. **Verifiable** — anyone can check a receipt is real
-
-## Current Limitations
-
-- No cryptographic signatures (v2 will add Ed25519)
-- No query-by-agent (coming soon)
-- No rate limiting
-- No expiration
+5. **Open Source** — self-host it, fork it, improve it
 
 ## Roadmap
 
-- v0.2: Ed25519 signatures
-- v0.3: Query by agent
-- v0.4: CORS for browser access
-- v0.5: Rate limiting
+- v0.3: Agent identity (DID)
+- v0.4: Receipt chaining (prove you can do X because you did Y)
+- v0.5: Marketplace for receipts
 
 ---
 
