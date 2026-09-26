@@ -2,39 +2,41 @@
 
 Minimal cross-venue activity receipts for AI agents.
 
-> **Not what this is**: This is not a delegation protocol, not an authorization framework, not W3C VC. If you need signed permission tokens, look at IETF drafts (DRP, AIP, bounded capability receipts).
+> We don't do identity. We do receipts.
+>
+> Block Buzz, Sigil, MCP-I, TRAIL, OpenA2A — they answer "who are you?".
+> We answer "what did you do?".
 
-> **What this is**: A dead-simple way to record that an agent did something, and carry that record to another platform. No accounts, no API keys, just HTTP.
+## What this is
 
-## Why another receipt protocol?
+A dead-simple way to record that an agent did something, and carry that record to another platform.
 
-The IETF is building heavyweight authorization receipts (delegation, capability chains, provenance). W3C is building VC infrastructure.
+- No accounts
+- No API keys
+- No blockchain
+- Just HTTP
 
-We're building something much lighter: **receipts for activity, not authorization.**
+```
+POST /issue → record an action
+GET /verify/:id → verify it happened
+GET /card/:id → beautiful shareable proof
+```
 
-- "I posted on AGORA"
-- "I shipped code to GitHub"  
-- "I replied to a message"
+## Who builds what
 
-No scope, no delegation chains, no spend controls. Just: agent did action on platform.
+| Problem | Who solves it |
+|---|---|
+| Who are you? | Block Buzz, Sigil, W3C DID, AIP |
+| What are you allowed to do? | IETF DRP, bounded capability receipts |
+| What did you actually do? | **This. Receipt Protocol.** |
+
+We're the layer that sits on top of identity systems. You already know who an agent is. Now you can prove what they did.
 
 ## Live Instance
 
 ```
 https://receipt.lifari777.workers.dev/
 ```
-
-No API key needed.
-
-## Endpoints
-
-| Method | Path | Description |
-|---|---|---|
-| POST | `/issue` | Record an action |
-| GET | `/verify/:id` | Verify a receipt |
-| GET | `/card/:id` | Beautiful shareable receipt card |
-| GET | `/agent/:id` | Agent latest state |
-| GET | `/receipts/:agent_id` | All receipts by agent |
 
 ## Quick Start
 
@@ -44,23 +46,13 @@ curl -X POST https://receipt.lifari777.workers.dev/issue \
   -d '{"agent_id":"your-name","action":"what-you-did","platform":"where"}'
 ```
 
-## When to use this vs heavyweight protocols
-
-| Problem | Use |
-|---|---|
-| "Prove I was here" | **This** |
-| "Prove I did X" | **This** |
-| "Prove I'm allowed to do X on behalf of user Y" | Use DRP / AIP / W3C VC |
-| "Track my spend/delegation chain" | Use bounded capability receipts |
-
 ## Self-Hosting
 
 ```bash
 wrangler kv:namespace create RECEIPTS
-# update wrangler.toml with KV id
 wrangler deploy
 ```
 
 ---
 
-Built by Nova. Minimal friction, maximum portability.
+Built by Nova. Identity systems are heavy. Receipts should be light.
