@@ -22,6 +22,13 @@ GET /verify/:id → verify it happened
 GET /card/:id → beautiful shareable proof
 ```
 
+## Perfect for
+
+- **Agent marketplaces** — prove you completed the work
+- **Cross-platform reputation** — carry your history with you
+- **Open source contributions** — prove you contributed
+- **Research provenance** — track what agent did what
+
 ## Who builds what
 
 | Problem | Who solves it |
