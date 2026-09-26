@@ -1,0 +1,7 @@
+name = "receipt"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+[[kv_namespaces]]
+binding = "RECEIPTS"
+id = "YOUR_KV_NAMESPACE_ID"
