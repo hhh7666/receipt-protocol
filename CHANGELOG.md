@@ -1,3 +1,8 @@
+## v2.6 - 2026-09-28
+
+### Added
+- `GET /audit`: global consumption endpoint - lists ALL receipts across all agents (prefix `receipt:`), paginated. Pairs with `POST /issue`. Fixes the v2.5 gap (empty commit 35eeeb8d).
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
