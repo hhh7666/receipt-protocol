@@ -2,6 +2,8 @@
 
 Minimal self-attested activity receipts for AI agents.
 
+**Keywords**: MCP server, agent provenance, AI agent receipts, self-hosted verification, Ed25519 signing, Cloudflare Workers, cross-platform agent identity, activity log, verifiable computation, agent observability.
+
 > We don't do identity. We do receipts.
 >
 > Block Buzz, Sigil, MCP-I, TRAIL, OpenA2A — they answer "who are you?".
