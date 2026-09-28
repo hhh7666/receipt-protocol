@@ -247,8 +247,177 @@ async function handleRequest(request) {
     return json({ algorithm: 'Ed25519', publicKey });
   }
 
+  // ============ LANDING PAGE (/) ============
   if (path === '/' && request.method === 'GET') {
-    // ---- Web UI (server-rendered) ----
+    const receipts = await listAllReceipts();
+    const { publicKey } = await getKeyPair();
+    const agentSet = new Set(receipts.map(r => r.agent_id));
+    const venueSet = new Set(receipts.map(r => r.platform));
+    const pub = publicKey && publicKey.x ? publicKey.x.slice(0, 20) + '…' : '(auto)';
+
+    const page = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receipt Protocol — Prove what happened</title>
+<meta name="description" content="The verification layer for agent actions. Ed25519-signed receipts prove an agent did what it claims, across venues and ecosystems.">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; background:#0b1020; color:#e6e9f2; }
+  .nav { position:sticky; top:0; z-index:10; background:rgba(11,16,32,.85); backdrop-filter:blur(10px); border-bottom:1px solid #1d2740; }
+  .nav-in { max-width:1000px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; padding:14px 20px; }
+  .brand { font-weight:800; font-size:16px; letter-spacing:.3px; background:linear-gradient(90deg,#7c9cff,#3ddad7); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .nav-links { display:flex; align-items:center; gap:22px; font-size:13px; color:#aab4d4; }
+  .nav-links a { color:#aab4d4; text-decoration:none; }
+  .nav-links a:hover { color:#e6e9f2; }
+  .cta { display:inline-block; background:linear-gradient(90deg,#7c9cff,#3ddad7); color:#0b1020; font-weight:700; border-radius:10px; padding:10px 20px; font-size:13px; text-decoration:none; }
+  .wrap { max-width:1000px; margin:0 auto; padding:0 20px; }
+  .hero { padding:96px 0 72px; text-align:center; }
+  .hero h1 { font-size:52px; line-height:1.08; font-weight:800; letter-spacing:-1px; background:linear-gradient(90deg,#7c9cff,#3ddad7); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .hero .sub { margin:22px auto 0; max-width:640px; font-size:18px; color:#8b93ad; line-height:1.6; }
+  .hero .cta { margin-top:34px; font-size:16px; padding:16px 32px; border-radius:12px; }
+  .trust { margin-top:34px; display:flex; justify-content:center; gap:36px; }
+  .trust b { display:block; font-size:24px; color:#e6e9f2; }
+  .trust span { font-size:12px; color:#8b93ad; }
+  .sec { padding:72px 0; border-top:1px solid #141b31; }
+  .sec h2 { font-size:30px; font-weight:800; letter-spacing:-.5px; }
+  .sec .lead { margin-top:12px; font-size:16px; color:#8b93ad; max-width:640px; line-height:1.6; }
+  .prob { max-width:720px; margin:0 auto; text-align:center; padding:84px 0; }
+  .prob h2 { font-size:34px; font-weight:800; letter-spacing:-.5px; }
+  .prob .sub { margin-top:18px; font-size:17px; color:#8b93ad; line-height:1.7; }
+  .steps { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:44px; }
+  .step { background:#141b31; border:1px solid #1f2a45; border-radius:14px; padding:24px; }
+  .step .n { font-size:12px; color:#3ddad7; font-weight:700; letter-spacing:1px; }
+  .step h3 { margin-top:10px; font-size:18px; }
+  .step p { margin-top:8px; font-size:13px; color:#8b93ad; line-height:1.6; }
+  .stack { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:44px; }
+  .layer { border-radius:14px; padding:26px 24px; border:1px solid #1f2a45; background:#141b31; }
+  .layer.hl { border-color:#7c9cff; background:#16214a; box-shadow:0 0 0 1px #7c9cff33; }
+  .layer .tag { font-size:12px; font-weight:700; letter-spacing:.5px; }
+  .layer h3 { margin-top:12px; font-size:19px; }
+  .layer p { margin-top:8px; font-size:13px; color:#8b93ad; line-height:1.6; }
+  .layer .status { margin-top:14px; font-size:12px; font-weight:700; }
+  .grid2 { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin-top:44px; }
+  .feat { background:#141b31; border:1px solid #1f2a45; border-radius:14px; padding:24px; }
+  .feat h3 { font-size:17px; }
+  .feat p { margin-top:8px; font-size:13px; color:#8b93ad; line-height:1.6; }
+  .endcta { text-align:center; padding:90px 0 70px; }
+  .endcta h2 { font-size:34px; font-weight:800; letter-spacing:-.5px; }
+  .endcta .cta { margin-top:30px; font-size:16px; padding:16px 36px; border-radius:12px; }
+  .foot { border-top:1px solid #141b31; padding:26px 0 40px; font-size:12px; color:#5b647f; text-align:center; }
+  .foot code { color:#7cc7a8; word-break:break-all; }
+  @media (max-width:720px){
+    .hero h1 { font-size:34px; }
+    .hero { padding:64px 0 48px; }
+    .steps,.stack,.grid2 { grid-template-columns:1fr; }
+    .nav-links { display:none; }
+    .trust { gap:24px; }
+  }
+</style>
+</head>
+<body>
+<nav class="nav"><div class="nav-in">
+  <div class="brand">Receipt Protocol</div>
+  <div class="nav-links">
+    <a href="#problem">Problem</a>
+    <a href="#how">How it works</a>
+    <a href="#stack">Stack</a>
+    <a href="#features">Features</a>
+    <a href="#uses">Use cases</a>
+  </div>
+  <a class="cta" href="/app">Open the App</a>
+</div></nav>
+
+<div class="hero">
+  <div class="wrap">
+    <h1>Prove what happened.</h1>
+    <p class="sub">The verification layer for agent actions. Ed25519-signed receipts prove an agent did what it claims — across venues, markets and ecosystems.</p>
+    <a class="cta" href="/app">Issue · Verify · Audit</a>
+    <div class="trust">
+      <div><b>` + receipts.length + `</b><span>receipts signed</span></div>
+      <div><b>` + agentSet.size + `</b><span>agents tracked</span></div>
+      <div><b>` + venueSet.size + `</b><span>venues covered</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="prob" id="problem">
+  <div class="wrap">
+    <h2>Agents can claim anything.<br>Nothing can verify it.</h2>
+    <p class="sub">An agent says it posted on a forum, executed a trade, or completed a task. Today there is no cheap, standard way to prove that claim later. Chat logs can be forged. Word of mouth does not scale. The agent economy is missing a behavior layer.</p>
+  </div>
+</div>
+
+<div class="sec" id="how">
+  <div class="wrap">
+    <h2>How it works</h2>
+    <p class="lead">Three steps, zero accounts, one public key. Any agent or human can issue and any third party can verify.</p>
+    <div class="steps">
+      <div class="step"><div class="n">01</div><h3>Issue</h3><p>An agent emits a receipt: who did what, where, with an optional proof link.</p></div>
+      <div class="step"><div class="n">02</div><h3>Sign</h3><p>The worker signs the receipt with an Ed25519 key pair. The signature is attached and stored in KV.</p></div>
+      <div class="step"><div class="n">03</div><h3>Verify &amp; Audit</h3><p>Anyone checks a receipt by ID, or reads the global audit. Signature valid = bytes present = claim intact.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="sec" id="stack">
+  <div class="wrap">
+    <h2>The missing layer</h2>
+    <p class="lead">Identity says who you are. Payment moves value. Receipts prove what actually happened.</p>
+    <div class="stack">
+      <div class="layer"><div class="tag" style="color:#8b93ad;">IDENTITY</div><h3>Who are you?</h3><p>Passports, keys, reputation carriers. Well served by existing ecosystems.</p><div class="status" style="color:#8b93ad;">EXISTING</div></div>
+      <div class="layer"><div class="tag" style="color:#8b93ad;">PAYMENT</div><h3>How value moves</h3><p>Channels for value transfer between nodes. Mature and crowded.</p><div class="status" style="color:#8b93ad;">EXISTING</div></div>
+      <div class="layer hl"><div class="tag" style="color:#3ddad7;">RECEIPT</div><h3>What happened?</h3><p>Signed, queryable, auditable proof of actions. Open, cheap, cross-venue.</p><div class="status" style="color:#3ddad7;">THE GAP · THIS</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="sec" id="features">
+  <div class="wrap">
+    <h2>Built for agents, open to all</h2>
+    <div class="grid2">
+      <div class="feat"><h3>Ed25519 signatures</h3><p>Cryptographic proof attached to every receipt. Tamper-evident by construction.</p></div>
+      <div class="feat"><h3>Cross-venue by design</h3><p>One protocol for AGORA, GitHub, hackathons, markets — any substrate. Receipts carry a venue field, not a silo.</p></div>
+      <div class="feat"><h3>Global audit</h3><p>Read every receipt in the system with a single GET. The consumption side of the loop.</p></div>
+      <div class="feat"><h3>No accounts, no KYC</h3><p>Anyone can issue. Verification needs only the public key.</p></div>
+      <div class="feat"><h3>Rate-limited &amp; CORS</h3><p>30 req/min per IP, open CORS — safe to call from browsers and workers.</p></div>
+      <div class="feat"><h3>GitHub archive</h3><p>Receipts are mirrored to the repo as files. Immutable log outside the runtime.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="sec" id="uses">
+  <div class="wrap">
+    <h2>Where receipts change the game</h2>
+    <div class="grid2">
+      <div class="feat"><h3>Agent marketplaces</h3><p>Proof of delivery before payment release. Resolve disputes with signatures, not screenshots.</p></div>
+      <div class="feat"><h3>Cross-platform reputation</h3><p>A portable record of what an agent actually did — the substrate for reputation that survives platform switches.</p></div>
+      <div class="feat"><h3>Anti-impersonation</h3><p>Sign actions with a known key. A claim without a matching signature is just noise.</p></div>
+      <div class="feat"><h3>Hackathons &amp; audits</h3><p>Timestamped proof of attendance, submission, or delivery. Verifiable after the event ends.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="endcta">
+  <div class="wrap">
+    <h2>The behavior layer is open.<br>Start proving.</h2>
+    <a class="cta" href="/app">Open the App →</a>
+  </div>
+</div>
+
+<div class="foot">
+  <div class="wrap">Ed25519 public key · <code>` + pub + `</code></div>
+  <div class="wrap" style="margin-top:8px;">Open source · Worker endpoints: /issue · /verify/:id · /agent/:id · /receipts/:agent · /audit · /pubkey</div>
+</div>
+</body>
+</html>`;
+
+    return html(page);
+  }
+
+  // ============ APP UI (/app) ============
+  if (path === '/app' && request.method === 'GET') {
     const receipts = await listAllReceipts();
     const { publicKey } = await getKeyPair();
 
@@ -277,18 +446,18 @@ async function handleRequest(request) {
     const pubkey = publicKey && publicKey.x ? publicKey.x.slice(0, 24) + '…' : '(auto-generating)';
 
     const page = `<!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Receipt Protocol — Cross-Venue Behavior Receipts</title>
+<title>Receipt Protocol — App</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; background:#0b1020; color:#e6e9f2; min-height:100vh; }
+  .topbar { background:#0e1428; border-bottom:1px solid #1d2740; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:10; }
+  .brand { font-weight:800; font-size:15px; background:linear-gradient(90deg,#7c9cff,#3ddad7); -webkit-background-clip:text; -webkit-text-fill-color:transparent; text-decoration:none; }
+  .back { font-size:12px; color:#8b93ad; text-decoration:none; }
   .wrap { max-width:760px; margin:0 auto; padding:20px 16px 60px; }
-  header { padding:28px 0 20px; border-bottom:1px solid #1d2740; margin-bottom:20px; }
-  h1 { font-size:24px; font-weight:700; background:linear-gradient(90deg,#7c9cff,#3ddad7); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
-  .sub { margin-top:6px; color:#8b93ad; font-size:13px; }
   .stats { display:flex; gap:10px; margin:16px 0; }
   .stat { flex:1; background:#141b31; border:1px solid #1f2a45; border-radius:12px; padding:12px; text-align:center; }
   .stat b { display:block; font-size:20px; color:#7c9cff; }
@@ -319,12 +488,11 @@ async function handleRequest(request) {
 </style>
 </head>
 <body>
+<div class="topbar">
+  <a class="brand" href="/">Receipt Protocol</a>
+  <a class="back" href="/">← Home</a>
+</div>
 <div class="wrap">
-  <header>
-    <h1>Receipt Protocol</h1>
-    <div class="sub">Ed25519-signed behavior receipts · emit in execution field → consume in supply field</div>
-  </header>
-
   <div class="stats">
     <div class="stat"><b>` + receipts.length + `</b><span>receipts</span></div>
     <div class="stat"><b>` + new Set(receipts.map(r => r.agent_id)).size + `</b><span>agents</span></div>
@@ -341,11 +509,11 @@ async function handleRequest(request) {
     <input id="platform" placeholder="e.g. AGORA" required>
     <label>Proof URL (optional)</label>
     <input id="proof" placeholder="https://…">
-    <div class="formrow"><button class="btn" type="submit">Sign & Issue</button></div>
+    <div class="formrow"><button class="btn" type="submit">Sign &amp; Issue</button></div>
     <div id="issueMsg" class="msg"></div>
   </form>
 
-  <h2>🔍 Verify Receipt</h2>
+  <h2>Verify Receipt</h2>
   <form id="verifyForm">
     <label>Receipt ID</label>
     <input id="verify_id" placeholder="Paste receipt ID">
@@ -353,7 +521,7 @@ async function handleRequest(request) {
     <div id="verifyMsg" class="msg"></div>
   </form>
 
-  <h2>📜 All Receipts (` + receipts.length + `）</h2>
+  <h2>All Receipts (` + receipts.length + `)</h2>
   ` + rows + `
 
   <div class="pub">Ed25519 PublicKey · <code>` + pubkey + `</code></div>
@@ -385,12 +553,12 @@ async function handleRequest(request) {
     }).then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
       .then(function(res){
         if(res.ok){
-          show(issueMsg, '✅ Issued. ID: ' + res.d.id, true);
+          show(issueMsg, '✓ Issued. ID: ' + res.d.id, true);
           setTimeout(function(){ location.reload(); }, 1200);
         } else {
-          show(issueMsg, '❌ ' + (res.d.error || JSON.stringify(res.d)), false);
+          show(issueMsg, '✗ ' + (res.d.error || JSON.stringify(res.d)), false);
         }
-      }).catch(function(err){ show(issueMsg, '❌ Request failed: ' + err.message, false); });
+      }).catch(function(err){ show(issueMsg, '✗ Request failed: ' + err.message, false); });
   });
 
   verifyForm.addEventListener('submit', function(e){
@@ -401,11 +569,11 @@ async function handleRequest(request) {
       .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
       .then(function(res){
         if(res.d && res.d.verdict){
-          show(verifyMsg, '✅ ' + res.d.verdict + (res.d.axes ? ' · Signature valid: ' + res.d.axes.signature_valid_at_signing : ''), res.ok);
+          show(verifyMsg, '✓ ' + res.d.verdict + (res.d.axes ? ' · Signature valid: ' + res.d.axes.signature_valid_at_signing : ''), res.ok);
         } else {
-          show(verifyMsg, '❌ ' + (res.d.error || JSON.stringify(res.d)), false);
+          show(verifyMsg, '✗ ' + (res.d.error || JSON.stringify(res.d)), false);
         }
-      }).catch(function(err){ show(verifyMsg, '❌ Request failed: ' + err.message, false); });
+      }).catch(function(err){ show(verifyMsg, '✗ Request failed: ' + err.message, false); });
   });
 })();
 </script>
