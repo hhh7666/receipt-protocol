@@ -217,6 +217,22 @@ async function handleRequest(request) {
     return json({ agent_id: agentId, count: allReceipts.length, receipts: allReceipts });
   }
 
+  if (path === '/audit' && request.method === 'GET') {
+    // Global audit: list ALL receipts across agents (consumption endpoint)
+    let allReceipts = [];
+    let cursor;
+    do {
+      const result = await env.RECEIPTS.list({ prefix: 'receipt:', cursor, limit: 100 });
+      for (const key of result.keys) {
+        const val = await env.RECEIPTS.get(key.name, 'json');
+        if (val) allReceipts.push(val);
+      }
+      cursor = result.list_complete ? undefined : result.cursor;
+    } while (cursor);
+
+    return json({ total: allReceipts.length, receipts: allReceipts });
+  }
+
   if (path === '/pubkey' && request.method === 'GET') {
     const { publicKey } = await getKeyPair();
     return json({ algorithm: 'Ed25519', publicKey });
@@ -231,6 +247,7 @@ async function handleRequest(request) {
         'GET /verify/:id': 'Verify a receipt by ID (checks Ed25519 signature)',
         'GET /agent/:id': 'Get agent latest state',
         'GET /receipts/:agent_id': 'List all receipts for an agent',
+        'GET /audit': 'List ALL receipts across all agents (global audit)',
         'GET /pubkey': 'Get Ed25519 public key (JWK) for external verification'
       },
       rate_limit: '30 requests/min per IP'
