@@ -108,15 +108,88 @@ async function handleRequest(request) {
 
   if (path.startsWith('/verify/') && request.method === 'GET') {
     const id = path.split('/verify/')[1];
+    const checked_at = new Date().toISOString();
+    const query_path = path;
+
     const stored = await env.RECEIPTS.get('receipt:' + id);
-    if (!stored) return json({ valid: false, reason: 'receipt not found' }, 404);
+
+    if (!stored) {
+      // Check verdict history to distinguish "never existed" from "existed then deleted"
+      const verdictHistory = await env.RECEIPTS.get('verdict:' + id, 'json');
+      if (verdictHistory && verdictHistory.signature_valid_at_signing) {
+        return json({
+          verdict: 'WAS_VERIFIED_NOW_ABSENT',
+          receipt_id: id,
+          axes: {
+            signature_valid_at_signing: true,
+            bytes_present_now: false,
+            key_current_standing: 'unknown',
+            verifier_observation: 'bytes absent, but signature was valid at signing time'
+          },
+          checked_at,
+          query_path,
+          cache_policy: 'fresh',
+          suggested_next_action: 'Do not retry issuance. The receipt existed and was later removed.'
+        });
+      }
+      return json({
+        verdict: 'NOT_FOUND',
+        receipt_id: id,
+        axes: {
+          signature_valid_at_signing: 'unknown',
+          bytes_present_now: false,
+          key_current_standing: 'unknown',
+          verifier_observation: 'no receipt found on this route'
+        },
+        checked_at,
+        query_path,
+        cache_policy: 'fresh',
+        suggested_next_action: 'Check the receipt ID. If issuance returned an id but you get this, it may be an ABSENT_AFTER_ACCEPT phantom write.'
+      }, 404);
+    }
 
     const signedReceipt = JSON.parse(stored);
     const { signature, ...receiptData } = signedReceipt;
-    if (!signature) return json({ valid: false, reason: 'no signature on receipt' }, 400);
 
-    const isValid = await verifySignature(receiptData, signature);
-    return json({ valid: isValid, receipt: signedReceipt });
+    if (!signature) {
+      return json({
+        verdict: 'NO_SIGNATURE',
+        receipt_id: id,
+        axes: {
+          signature_valid_at_signing: false,
+          bytes_present_now: true,
+          key_current_standing: 'unknown',
+          verifier_observation: 'receipt has no signature'
+        },
+        checked_at,
+        query_path
+      }, 400);
+    }
+
+    const sigValid = await verifySignature(receiptData, signature);
+
+    // Record verdict history (append-only)
+    await env.RECEIPTS.put('verdict:' + id, JSON.stringify({
+      receipt_id: id,
+      signature_valid_at_signing: sigValid,
+      last_checked_at: checked_at,
+      query_path
+    }));
+
+    return json({
+      verdict: sigValid ? 'VERIFIED' : 'TAMPERED',
+      receipt: signedReceipt,
+      axes: {
+        signature_valid_at_signing: sigValid,
+        bytes_present_now: true,
+        key_current_standing: 'unknown',
+        verifier_observation: sigValid ? 'signature valid, bytes present on this route' : 'signature mismatch'
+      },
+      checked_at,
+      query_path,
+      cache_policy: 'fresh',
+      note: 'Proves: issuer signed this, bytes present on this route. Does NOT prove: the underlying action happened, or the key still belongs to the same entity.'
+    });
   }
 
   if (path.startsWith('/agent/') && request.method === 'GET') {
