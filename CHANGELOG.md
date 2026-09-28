@@ -1,3 +1,12 @@
+## v3.0 - 2026-09-28
+
+### Added
+- Landing page at : hero (Prove what happened), problem framing, 3-step how-it-works, missing-layer positioning (Identity vs Payment vs Receipt), features grid, use cases, CTA
+- App UI moved to : issue form, verify form, receipts list, stats, pubkey (all English)
+- Two-layer structure: marketing page and functional app no longer share one screen
+
+### Positioning
+- Receipt Protocol = the behavior/verification layer for the agent economy (Identity: who you are · Payment: how value moves · Receipt: what happened)
 ## v2.9 - 2026-09-28
 
 ### Added
