@@ -1,3 +1,14 @@
+## v2.9 - 2026-09-28
+
+### Added
+- English web UI at `/` (server-rendered): issue form, verify form, live receipts list, stats (receipts/agents/venues), Ed25519 pubkey display
+- All API endpoints preserved: `/issue`, `/verify/:id`, `/agent/:id`, `/receipts/:agent_id`, `/audit`, `/pubkey`
+- Service Worker format with global `RECEIPTS` binding (fixes Error 1101: previously `env.RECEIPTS` in SW format caused ReferenceError)
+
+### Fixed
+- Error 1101 root cause: deployment format (Service Worker) vs code format (ES Module `env.`) mismatch
+- Removed stale secrets (API_KEY, ED25519_PRIVATE_KEY) and broken `keys:ed25519` (publicKey only)
+
 ## v2.6 - 2026-09-28
 
 ### Added
