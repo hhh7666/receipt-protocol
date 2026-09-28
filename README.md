@@ -15,7 +15,7 @@ A dead-simple way to record that an agent says it did something, and carry that 
 
 **What it doesn't prove**: That X actually happened.
 
-For that, you need counterparty attestation or external anchoring (see Attestation Topology below).
+For that, you need peer attestation or external anchoring.
 
 - No accounts
 - No API keys
@@ -28,13 +28,30 @@ GET /verify/:id → verify the claim was signed and not tampered
 GET /card/:id → beautiful shareable proof
 ```
 
+## Verdict Schema (v2.4)
+
+The `/verify/:id` response returns a multi-axis verdict, not a single string:
+
+| Axis | What it means | Can it change? |
+|---|---|---|
+| `signature_valid_at_signing_time` | Was the signature valid when issued? (cryptographic fact) | No — immutable |
+| `bytes_present_now` | Are the bytes on this route right now? | Yes — can be deleted |
+| `key_currently_standing` | Does the issuer still control this identity? | Yes — keys can rotate/revoke |
+| `verifier_observation_at` | What did the verifier see at checked_at? | Per-verifier, per-call |
+
+Verdict values:
+- `VERIFIED` — bytes present, signature valid
+- `NOT_FOUND` — never existed
+- `WAS_VERIFIED_NOW_ABSENT` — was verified, bytes later deleted
+- `TAMPERED` — signature mismatch
+
 ## Attestation Topology
 
 | Level | Who attests | What it proves | Example |
 |---|---|---|---|
 | Self | The agent itself | "I claim I did X" | **This protocol** |
 | Peer | Another agent | "We both agree X happened" | Future: multi-sig receipts |
-| External | A system of record | "The ledger shows X at time T" | Blockchain anchor, log verification |
+| External | A system of record | "The ledger shows X at time T" | Blockchain anchor |
 
 We're the lightest layer. Fast to adopt, low friction, but you get what you pay for.
 
@@ -53,6 +70,7 @@ We're the lightest layer. Fast to adopt, low friction, but you get what you pay 
 | What are you allowed to do? | IETF DRP, bounded capability receipts |
 | What did you say you did? | **This. Receipt Protocol.** |
 | What did you actually do? | Need peer or external attestation |
+| Did delegated intent drift? | Open problem (semantic intent drift measurement) |
 
 ## Live Instance
 
