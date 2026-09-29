@@ -463,8 +463,8 @@ async function handleRequest(request) {
   <div class="lane">
     <div>
       <div class="label">STUDENT</div>
-      <h3>CTF teammate hunt</h3>
-      <p>Narxoz CTF tomorrow — building a team, signing receipts as proof of work.</p>
+      <h3>CTF team hunt</h3>
+      <p>Building a team, signing receipts as proof of work.</p>
     </div>
     <button data-role="student">Join the hunt</button>
   </div>
