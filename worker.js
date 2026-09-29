@@ -416,6 +416,136 @@ async function handleRequest(request) {
     return html(page);
   }
 
+  // ============ MEET PAGE (/meet) — 广告场入口 ============
+  if (path === '/meet' && request.method === 'GET') {
+    const page = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meet · KazHackStan 2026 — Receipt Protocol</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0b1020;color:#e6e9f2;min-height:100vh;}
+  .head{text-align:center;padding:34px 18px 22px;}
+  .brand{font-weight:800;font-size:18px;background:linear-gradient(90deg,#7c9cff,#3ddad7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+  .tag{margin-top:8px;font-size:12px;color:#8b93ad;letter-spacing:1px;}
+  .sub{margin-top:14px;font-size:15px;color:#aab4d4;max-width:520px;margin-left:auto;margin-right:auto;line-height:1.6;}
+  .lanes{max-width:560px;margin:20px auto 0;padding:0 18px;display:flex;flex-direction:column;gap:12px;}
+  .lane{border:1px solid #1f2a45;border-radius:14px;background:#141b31;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .lane .label{font-size:11px;font-weight:700;letter-spacing:1px;color:#7c9cff;}
+  .lane h3{font-size:16px;margin-top:4px;}
+  .lane p{font-size:12px;color:#8b93ad;margin-top:4px;line-height:1.5;}
+  .lane button{flex-shrink:0;background:linear-gradient(90deg,#7c9cff,#3ddad7);color:#0b1020;border:none;border-radius:10px;padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;}
+  .form{max-width:560px;margin:24px auto 0;padding:0 18px;}
+  .formbox{background:#141b31;border:1px solid #1f2a45;border-radius:14px;padding:18px;}
+  .formbox h3{font-size:15px;}
+  .formbox p{font-size:12px;color:#8b93ad;margin-top:6px;}
+  label{display:block;font-size:12px;color:#8b93ad;margin:12px 0 4px;}
+  input,select{width:100%;background:#0d1226;border:1px solid #243152;color:#e6e9f2;border-radius:8px;padding:10px;font-size:14px;}
+  input:focus{outline:none;border-color:#7c9cff;}
+  .btn{display:block;width:100%;margin-top:16px;background:linear-gradient(90deg,#7c9cff,#3ddad7);color:#0b1020;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;}
+  .msg{margin-top:12px;font-size:13px;border-radius:8px;padding:10px;display:none;}
+  .msg.ok{display:block;background:#0e2a22;color:#3ddad7;border:1px solid #1d4a3e;}
+  .msg.err{display:block;background:#2a1616;color:#ff8a8a;border:1px solid #4a1f1f;}
+  .foot{text-align:center;padding:30px 18px 40px;font-size:11px;color:#5b647f;}
+  .foot a{color:#7c9cff;text-decoration:none;}
+</style>
+</head>
+<body>
+<div class="head">
+  <div class="brand">Receipt Protocol</div>
+  <div class="tag">KAZHACKSTAN 2026 · ASTANA</div>
+  <div class="sub">Pick your lane. Leave a verifiable receipt. We follow up — proved, not promised.</div>
+</div>
+
+<div class="lanes">
+  <div class="lane">
+    <div>
+      <div class="label">STUDENT</div>
+      <h3>CTF teammate hunt</h3>
+      <p>Narxoz CTF tomorrow — building a team, signing receipts as proof of work.</p>
+    </div>
+    <button data-role="student">Join the hunt</button>
+  </div>
+  <div class="lane">
+    <div>
+      <div class="label">BUILDER / DEV</div>
+      <h3>Live verify demo</h3>
+      <p>Ed25519-signed receipts for agent actions. Watch a verification pass in 30s.</p>
+    </div>
+    <button data-role="builder">See it live</button>
+  </div>
+  <div class="lane">
+    <div>
+      <div class="label">BUSINESS / SECURITY</div>
+      <h3>AI fraud &amp; audit pilot</h3>
+      <p>Tamper-evident receipts for AI-agent actions. 5-minute pilot conversation.</p>
+    </div>
+    <button data-role="business">Book 5-min chat</button>
+  </div>
+  <div class="lane">
+    <div>
+      <div class="label">INSTITUTION / RESEARCH</div>
+      <h3>The math of verifiable execution</h3>
+      <p>Partial observation, identifiability, inverse problems — an open research question.</p>
+    </div>
+    <button data-role="research">Open the question</button>
+  </div>
+</div>
+
+<div class="form">
+  <div class="formbox">
+    <h3>Connect — sign a receipt</h3>
+    <p>Your name + one contact. We sign a receipt; you get a verifiable link. No inbox spam, ever.</p>
+    <label>Name</label>
+    <input id="name" placeholder="Your name">
+    <label>Role</label>
+    <select id="role">
+      <option value="student">Student / CTF</option>
+      <option value="builder">Builder / Dev</option>
+      <option value="business">Business / Security</option>
+      <option value="research">Institution / Research</option>
+    </select>
+    <label>Telegram or email</label>
+    <input id="contact" placeholder="@telegram or email">
+    <button class="btn" id="connect">Sign receipt &amp; connect</button>
+    <div id="msg" class="msg"></div>
+  </div>
+</div>
+
+<div class="foot">
+  Receipt Protocol · <a href="/">landing</a> · <a href="/audit">public audit</a> · <a href="/app">app</a>
+</div>
+
+<script>
+(function(){
+  var nameEl=document.getElementById('name'),roleEl=document.getElementById('role'),contactEl=document.getElementById('contact'),msg=document.getElementById('msg'),btn=document.getElementById('connect');
+  function show(t,ok){msg.textContent=t;msg.className='msg '+(ok?'ok':'err');}
+  var laneBtns=document.querySelectorAll('.lane button');
+  for(var i=0;i<laneBtns.length;i++){
+    (function(b){b.addEventListener('click',function(){roleEl.value=b.getAttribute('data-role');var f=document.querySelector('.formbox');f.scrollIntoView({behavior:'smooth'});});})(laneBtns[i]);
+  }
+  btn.addEventListener('click',function(){
+    var name=nameEl.value.trim(),role=roleEl.value,contact=contactEl.value.trim();
+    if(!name){show('Name required',false);return;}
+    if(!contact){show('Telegram or email required',false);return;}
+    var body={agent_id:name.replace(/[ \t]+/g,'-').toLowerCase(),action:'connect-'+role+'-kazhackstan-day1',platform:'KazHackStan',proof:contact};
+    fetch('/issue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
+      .then(function(res){
+        if(res.ok){ show('✓ Signed. Verify: https://receipt.lifari777.workers.dev/verify/'+res.d.id,true); }
+        else { show('✗ '+(res.d.error||'failed'),false); }
+      }).catch(function(e){show('✗ '+e.message,false);});
+  });
+})();
+</script>
+</body>
+</html>`;
+
+    return html(page);
+  }
+
   // ============ APP UI (/app) ============
   if (path === '/app' && request.method === 'GET') {
     const receipts = await listAllReceipts();
