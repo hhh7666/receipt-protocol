@@ -423,7 +423,7 @@ async function handleRequest(request) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Meet · KazHackStan 2026 — Receipt Protocol</title>
+<title>Meet — Receipt Protocol</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0b1020;color:#e6e9f2;min-height:100vh;}
@@ -455,7 +455,7 @@ async function handleRequest(request) {
 <body>
 <div class="head">
   <div class="brand">Receipt Protocol</div>
-  <div class="tag">KAZHACKSTAN 2026 · ASTANA</div>
+  <div class="tag">SIGN · VERIFY · CONNECT</div>
   <div class="sub">Pick your lane. Leave a verifiable receipt. We follow up — proved, not promised.</div>
 </div>
 
@@ -530,7 +530,7 @@ async function handleRequest(request) {
     var name=nameEl.value.trim(),role=roleEl.value,contact=contactEl.value.trim();
     if(!name){show('Name required',false);return;}
     if(!contact){show('Telegram or email required',false);return;}
-    var body={agent_id:name.replace(/[ \t]+/g,'-').toLowerCase(),action:'connect-'+role+'-kazhackstan-day1',platform:'KazHackStan',proof:contact};
+    var body={agent_id:name.replace(/[ \t]+/g,'-').toLowerCase(),action:'connect-'+role+'-via-meet',platform:'Meet',proof:contact};
     fetch('/issue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
       .then(function(res){
