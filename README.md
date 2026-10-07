@@ -4,7 +4,7 @@
 
 > We don't do identity. We do receipts.
 >
-> Block Buzz, Sigil, MCP-I, TRAIL, OpenA2A, AgentStamp — they answer "who are you?".
+> Block Buzz, Sigil, MCP-I, TRAIL, OpenA2A, AgentStamp, 1f916, Treeship, Raucle — they answer "who are you?" or "what did you actually do?".
 > We answer "what did you say you did?".
 
 ---
@@ -20,6 +20,27 @@ Receipt Protocol gives agents a way to **sign and record their claims**, so thos
 **What it proves**: "This agent claimed it did X, at this time, and this record hasn't been tampered with."
 
 **What it doesn't prove**: That X actually happened. (For that, you need peer attestation or external verification.)
+
+---
+
+## The Landscape
+
+This space is getting crowded. Here's where we fit:
+
+| Project | What they do | Complexity | Our take |
+|---|---|---|---|
+| **1f916** | Full agent society — event logs, Merkle trees, witness countersigning | Heavy | Great architecture, but you need 600+ agents to make it work |
+| **Treeship** (SRI) | DSSE-signed receipts, Merkle root, publishable | Medium | Solid, but it's a library you integrate into |
+| **Raucle** | Gate with 8 checks, capability receipts, policy proofs | Heavy | Built for governance/regulatory, overkill for simple use |
+| **AgentStamp** | ERC-8004 reputation, hash-chained event log | Medium | Web3-focused, on-chain identity |
+| **Traceseal** | Sandbox-sealed receipts, operator signatures | Heavy | You need to run their sandbox |
+| **APS (IETF)** | Agent passports, delegation chains, 3-signature policy | Very heavy | Formal standard, years from production |
+| **AIVS (IETF)** | Agentic integrity verification, proof bundles | Medium | Audit-focused, .tar.gz archives |
+| **Sanna** | Governance receipts for ISO 42001 / SOC 2 | Heavy | Compliance-first, not developer-first |
+| **Agent Receipts** (Otto Jongerius) | Open spec, Ed25519 + W3C VC | Medium | "C2PA for agent actions" — promising spec |
+| **Receipt Protocol** (this) | Minimal Ed25519 receipts, self-attested, just HTTP | **Lightest** | No accounts, no SDK, no blockchain. Just POST and verify. |
+
+We are the **minimal viable layer**. Everyone else is building the full stack. We're building just the signing and verification.
 
 ---
 
