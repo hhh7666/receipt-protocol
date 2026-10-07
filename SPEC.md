@@ -1,8 +1,12 @@
-# Receipt Protocol v0.1
+# Receipt Protocol v2.4
 
 ## Abstract
 
-A receipt is a verifiable claim that an agent performed an action on a platform at a point in time. Receipts are designed to be portable across venues — they travel with the agent, not the platform.
+A receipt is a verifiable, signed claim that an agent performed an action on a platform at a point in time. Receipts are designed to be portable across venues — they travel with the agent, not the platform.
+
+This is **self-attested** proof. It proves "the agent claims this happened," not "this actually happened."
+
+---
 
 ## Receipt Format
 
@@ -14,7 +18,8 @@ A receipt is a verifiable claim that an agent performed an action on a platform 
   "platform": "string",
   "proof": "string | null",
   "issued_at": "ISO-8601",
-  "verifiable": true
+  "signature": "base64 Ed25519 signature",
+  "pubkey": "base64 Ed25519 public key"
 }
 ```
 
@@ -28,36 +33,59 @@ A receipt is a verifiable claim that an agent performed an action on a platform 
 | platform | string | yes | Where the agent did it |
 | proof | string | no | Optional link/hash for verification |
 | issued_at | string | auto | ISO-8601 timestamp |
-| verifiable | bool | auto | Always true if returned by server |
+| signature | string | auto | Ed25519 signature over canonical JSON |
+| pubkey | string | auto | Server's public key |
+
+---
+
+## Signature
+
+The signature is computed over the canonical JSON serialization of the receipt fields (excluding `signature` and `pubkey`), using Ed25519.
+
+Any third party can verify the signature offline by:
+1. Reconstructing the canonical JSON
+2. Verifying the signature with the public key
+
+No server call needed for signature verification.
+
+---
 
 ## Semantics
 
 ### What a receipt proves
 
 - An agent claims to have done something
-- The server confirms the receipt exists and hasn't been tampered with
+- The server signed that claim with Ed25519
+- The signature is valid (cryptographic fact)
+- The receipt hasn't been tampered with
 
-### What a receipt does NOT prove (yet)
+### What a receipt does NOT prove
 
 - That the agent is who they say they are
 - That the action actually happened
 - That the proof is genuine
 
-These require signatures (v0.2).
+These require peer attestation or external verification.
+
+---
 
 ## Design Decisions
 
-1. **No auth** — friction is the enemy of adoption. Start open, add auth later if needed.
+1. **No auth** — friction is the enemy of adoption. Start open.
 2. **Server-generated ID** — prevents collision, keeps client simple.
-3. **No signature** — v0.1 is proof-of-concept. v0.2 adds Ed25519.
+3. **Ed25519** — standard, well-known, easy to verify.
 4. **KV-backed** — simple, fast, globally distributed.
+5. **Self-attested first** — start with the simplest thing that works.
+
+---
 
 ## Open Questions
 
-1. How do we prevent spam? (rate limiting)
-2. How do we handle agent identity? (DID?)
-3. What's the right action vocabulary?
-4. How do receipts chain? (action A proves you can do action B?)
+1. How do we prevent spam? (rate limiting — done)
+2. How do we handle agent identity? (DID? — future)
+3. What's the right action vocabulary? (TBD)
+4. How do receipts chain? (action A proves you can do action B? — future)
+5. Multi-sig receipts? (peer attestation — future)
 
 ---
 
