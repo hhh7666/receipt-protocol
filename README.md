@@ -34,10 +34,9 @@ This space is getting crowded. Here's where we fit:
 | **Raucle** | Gate with 8 checks, capability receipts, policy proofs | Heavy | Built for governance/regulatory, overkill for simple use |
 | **AgentStamp** | ERC-8004 reputation, hash-chained event log | Medium | Web3-focused, on-chain identity |
 | **Traceseal** | Sandbox-sealed receipts, operator signatures | Heavy | You need to run their sandbox |
-| **APS (IETF)** | Agent passports, delegation chains, 3-signature policy | Very heavy | Formal standard, years from production |
-| **AIVS (IETF)** | Agentic integrity verification, proof bundles | Medium | Audit-focused, .tar.gz archives |
-| **Sanna** | Governance receipts for ISO 42001 / SOC 2 | Heavy | Compliance-first, not developer-first |
-| **Agent Receipts** (Otto Jongerius) | Open spec, Ed25519 + W3C VC | Medium | "C2PA for agent actions" — promising spec |
+| **VATE** | Verifiable admission envelopes, policy decisions | Medium | Great thinking on admission vs execution |
+| **WitnessKit** | Tamper-evident audit trails, hash chains | Medium | Hash chains + receipts = integrity + intent |
+| **BootProof** | Boot attestation, Living Receipt HTML | Medium | Cool self-verifying receipt format |
 | **Receipt Protocol** (this) | Minimal Ed25519 receipts, self-attested, just HTTP | **Lightest** | No accounts, no SDK, no blockchain. Just POST and verify. |
 
 We are the **minimal viable layer**. Everyone else is building the full stack. We're building just the signing and verification.
@@ -56,6 +55,7 @@ curl -X POST https://receipt.lifari777.workers.dev/issue \
     "agent_id": "my-agent@mydomain.com",
     "action": "called payment-api",
     "platform": "stripe.com",
+    "outcome": "success",
     "proof": "txn_abc123"
   }'
 
@@ -65,6 +65,56 @@ curl https://receipt.lifari777.workers.dev/verify/<receipt-id>
 # Beautiful shareable card
 open https://receipt.lifari777.workers.dev/card/<receipt-id>
 ```
+
+---
+
+## Receipt Format (v2.7)
+
+```json
+{
+  "schema_version": "2.7",
+  "id": "r_abc123",
+  "agent_id": "my-agent@mydomain.com",
+  "agent_pubkey": "ed25519:optional",
+  "agent_signature": "optional",
+  "action": "called payment-api",
+  "platform": "stripe.com",
+  "outcome": "success",
+  "proof": "txn_abc123",
+  "parent_receipt_id": "optional",
+  "parent_receipt_digest": "optional",
+  "prev_receipt_hash": "optional",
+  "trust_level": "self_attested",
+  "issued_at": "2026-10-09T12:00:00Z",
+  "server_signature": "ed25519:...",
+  "server_pubkey": "ed25519:..."
+}
+```
+
+See [SPEC.md](./SPEC.md) for full details.
+
+---
+
+## Key Features
+
+### Self-attested by default
+We start at the minimal layer. The agent claims something, we sign it. Anyone can add more trust on top.
+
+### Dual signing (optional)
+- **Agent signature** — proves "the agent made this claim"
+- **Server signature** — proves "we recorded this claim"
+- Both are optional and complementary. You decide how much to trust each.
+
+### Receipt chains (optional)
+Chain receipts together with `prev_receipt_hash` to prove order and completeness. Off by default — individual receipts are still the simplest.
+
+### Trust levels
+- `self_attested` — the default. We signed the claim, nothing more.
+- `third_party_attested` — a third party verified the claim.
+- `anchored` — the receipt hash is anchored to a public ledger.
+
+### Offline verification
+No server call needed to verify a signature. Just Ed25519 + canonical JSON.
 
 ---
 
@@ -80,7 +130,7 @@ open https://receipt.lifari777.workers.dev/card/<receipt-id>
 
 ---
 
-## Verdict Schema (v2.4)
+## Verdict Schema
 
 The `/verify/:id` response returns a multi-axis verdict, not a single string:
 
@@ -104,10 +154,10 @@ Verdict values:
 | Level | Who attests | What it proves | Status |
 |---|---|---|---|
 | Self | The agent itself | "I claim I did X" | **Live** |
-| Peer | Another agent | "We both agree X happened" | Roadmap |
-| Third-party | An external verifier | "I saw X happen" | Roadmap |
+| Third-party | An external verifier | "I saw X happen" | Supported in schema |
+| Anchored | Public transparency log | "This can't be backdated" | Supported in schema |
 
-We start at self-attested because it's the lowest friction. Every other layer builds on top of this.
+We start at self-attested because it's the lowest friction. Every other layer builds on top of the same receipt format.
 
 ---
 
@@ -118,6 +168,7 @@ We start at self-attested because it's the lowest friction. Every other layer bu
 3. **No accounts** — bring your own identity (any string works).
 4. **Self-attested first** — start with the simplest thing that works, add attestation later.
 5. **Portable** — receipts travel with the agent, not the platform.
+6. **Optional complexity** — chaining, dual signing, trust levels are all optional. Use them if you need them.
 
 ---
 
@@ -152,20 +203,10 @@ A receipt is different: it's cryptographically signed, tamper-evident, and porta
 
 - [x] v0.1 — basic receipts (no signature)
 - [x] v0.2 — Ed25519 signing
-- [x] v1.0 — multi-axis verdict
-- [x] v2.0 — beautiful shareable cards
-- [ ] v3.0 — multi-sig receipts (peer attestation)
-- [ ] v4.0 — receipt chaining (action A proves you can do action B)
-- [ ] v5.0 — receipt graphs (full agent history)
-
----
-
-## Contributing
-
-This is a living document. Open an issue if you have questions or ideas.
-
----
-
-## License
-
-MIT
+- [x] v2.3 — initial public release
+- [x] v2.4 — signature format
+- [x] v2.5 — schema versioning, outcome field, trust levels
+- [x] v2.6 — optional receipt chaining
+- [x] v2.7 — dual signing (agent + server)
+- [ ] v2.8 — Living Receipt HTML format
+- [ ] v3.0 — third-party attestation API
