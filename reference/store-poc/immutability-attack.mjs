@@ -54,19 +54,26 @@ console.log('=== Immutability Attack ===\n');
     r1.equals(r2) && r2.equals(r3));
 }
 
-// --- Attack 4: Store a receipt, then mutate input and re-store — must dedup by original digest ---
+// --- Attack 4: Store A, then mutate the same buffer to valid JSON B, re-store ---
 {
-  const data = Buffer.from(JSON.stringify({ receipt_id: 'attack-4', value: 'before' }));
-  const dig1 = storeReceipt(data).digest;
-  // Mutate and try to store again (may produce invalid JSON — that's fine, we test isolation)
-  data.write('ZZZZ', 0);
-  let r2;
-  try { r2 = storeReceipt(data); } catch { r2 = { deduped: false, errored: true }; }
-  // dig1 should still be retrievable and unchanged
-  const r1 = getReceiptRaw(dig1);
-  check('Attack 4: mutated re-store does not overwrite original',
-    r1 !== null && r1.toString().includes('before'),
-    `r1 contains 'before'=${r1?.toString().includes('before')}`);
+  const buf = Buffer.alloc(256);
+  const jsonA = JSON.stringify({ receipt_id: 'attack-4', value: 'before' });
+  buf.write(jsonA, 0, 'utf8');
+  const rawA = buf.subarray(0, Buffer.byteLength(jsonA, 'utf8'));
+  const dig1 = storeReceipt(rawA).digest;
+  // Mutate the same buffer: write valid JSON B over it
+  const jsonB = JSON.stringify({ receipt_id: 'attack-4', value: 'after' });
+  buf.write(jsonB, 0, 'utf8');
+  const rawB = buf.subarray(0, Buffer.byteLength(jsonB, 'utf8'));
+  const dig2 = storeReceipt(rawB).digest;
+  const rA = getReceiptRaw(dig1);
+  const rB = getReceiptRaw(dig2);
+  check('Attack 4: A and B get different digests, both retrievable, no cross-contamination',
+    rA !== null && rB !== null &&
+    dig1 !== dig2 &&
+    rA.toString().includes('"value":"before"') &&
+    rB.toString().includes('"value":"after"'),
+    `dig1=${dig1.slice(0,8)} dig2=${dig2.slice(0,8)}`);
 }
 
 // --- Attack 5: Shared ArrayBuffer views ---
@@ -86,13 +93,17 @@ console.log('=== Immutability Attack ===\n');
 {
   const data = Buffer.from(JSON.stringify({ receipt_id: 'attack-6', value: 'integrity' }));
   const dig = storeReceipt(data).digest;
+  let allMatched = true;
+  let firstMismatch = '';
   for (let i = 0; i < 5; i++) {
     const r = getReceiptRaw(dig);
-    if (sha256Hex(r) !== dig) {
-      check(`Attack 6: read #${i+1} hash matches digest`, false, `got ${sha256Hex(r).slice(0,12)}`);
+    if (!r || sha256Hex(r) !== dig) {
+      allMatched = false;
+      firstMismatch = `read #${i+1} got ${r ? sha256Hex(r).slice(0,12) : 'null'}`;
+      break;
     }
   }
-  check('Attack 6: 5 repeated reads all hash to stored digest', true);
+  check('Attack 6: 5 repeated reads all hash to stored digest', allMatched, firstMismatch);
 }
 
 console.log(`\n=== Result: ${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'} ===`);
