@@ -1,52 +1,43 @@
-# Receipt Store POC
+# Receipt Store POC — External Review Candidate
 
-A minimal, format-agnostic receipt storage and resolution layer.
+A **schema-agnostic JSON** receipt storage and reference-resolution experiment. This is an in-memory research POC, not a hosted service or a VATE implementation.
 
-## What it does
+## Boundaries
 
-- Stores receipts as **opaque bytes**, indexed by SHA-256 content digest
-- Retrieves by digest (byte-for-byte identical)
-- Queries by transaction ID
-- Resolves links between receipts, checking digest bindings
+- Stores the original input bytes without rewriting them; SHA-256 of those bytes is the **storage digest**.
+- Parses JSON to index `transaction_id` and `receipt_id` (VATE-oriented field extraction is currently heuristic).
+- Retrieves byte-identical data, queries transactions, and resolves outgoing `admission.receipt_id` references.
+- Never signs receipts, verifies signatures, asserts execution success, or makes issuer/trust decisions.
+- **Source-protocol digest != storage digest by default.** The resolver checks digest equality only if the reference explicitly declares `{alg:"sha256",profile:"raw-bytes",value:"..."}`. Unspecified canonicalization/digest scope yields `binding_status:"not_assessed"`, `digest_match:null`. This is intentionally conservative, **not** a claim of VATE-native digest verification.
+- Multiple stored receipts may share a `receipt_id`; reference matching considers all candidates rather than the first inserted record.
 
-## What it explicitly does NOT do
+## Run
 
-- Does not sign receipts
-- Does not modify receipt content
-- Does not verify signatures
-- Does not decide trust — returns `reference_found` / `digest_match` / `trust_assessed` as separate dimensions
+Requires Node.js 18+; no npm dependencies.
 
-## Quick start
-
-```bash
-node store.mjs /path/to/receipts/
+```sh
+cd reference/store-poc
 node negative-tests.mjs
+node store.mjs /absolute/path/to/json-receipt-samples
 ```
 
-## Tested against
+The regression suite is self-contained and does not require a VATE checkout. The second command is an optional sample demonstration. To reproduce the previously reported 63 VATE sample imports, obtain the sample JSON files from [VATE](https://github.com/Poke-nushi/Verifiable-Agent-Trust-Envelope), pin its Git commit, and pass the directory path. **The earlier 63/63 result is from Nova's report, not independently re-run by this review.** The sample provenance and exact commit are not yet frozen here.
 
-- 63 VATE sample receipts from Poke-nushi/Verifiable-Agent-Trust-Envelope
-- 7 negative assertions across 4 test suites
+## Regression cases
 
-## Status
+Byte-preserving round trip; SHA-256 addressing; transaction lookup; deduplication; duplicate receipt IDs with distinct digests; explicit raw-byte digest mismatch; unsupported digest profile; missing reference; missing receipt.
 
-| Capability | Verified |
-|---|---|
-| Store opaque bytes, index by sha256 | Yes |
-| Byte-for-byte retrieval | Yes |
-| Query by transaction_id | Yes |
-| Resolve outgoing references | Yes |
-| Detect digest mismatch (tampered reference) | Yes |
-| Handle missing references | Yes |
-| Deduplicate identical content | Yes |
-| HTTP server / REST API | No — in-memory only |
-| Verify signatures | No — out of scope |
-| Cross-format relation semantics | No — not yet tested |
-| RFC 8785 JCS canonicalization | No — loose POC-grade stringify |
+## Known limitations / out of scope
 
-## Known limitations
+- No persistence, authentication, HTTP API, rate limits, or multi-tenant isolation.
+- JSON only; arbitrary binary formats are not parsed/indexed.
+- VATE-native digest binding, canonicalization, and signature semantics **not verified**. The `digestObject` helper uses a non-RFC-8785 serializer and must not be treated as JCS.
+- No cross-format relationship normalization, reverse relation indexes, or exhaustive receipt-linkage semantics.
+- All receipt claims and relationships are untrusted input; a matching digest proves content correspondence under the declared profile, not truth, authorization, or execution.
+- The repository's test suite must be executed by the reviewer/CI; this change was prepared through GitHub file edits, without an independent local Node execution in this session.
 
-- In-memory only, no persistence
-- `stableStringify` is not RFC 8785 JCS (number edge cases, undefined handling)
-- Digest format: raw hex string (not `{alg, value}` object — VATE's format)
-- No HTTP layer yet
+## External review questions
+
+1. Does this separation between opaque storage digest and source-protocol digest preserve VATE's trust boundary?
+2. Which exact VATE digest scopes/canonicalization profiles would an optional adapter need to support?
+3. Are there ambiguity cases beyond duplicate `receipt_id` values that should be modeled without inferring trust?
