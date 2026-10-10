@@ -39,7 +39,9 @@ function storeReceipt(rawBytes) {
   const issuer = parsed.issuer?.id || parsed.actor || parsed.agent_id || 'unknown';
   const txId = parsed.execution?.transaction_id || parsed.transaction_id || parsed.id || 'unknown';
 
-  store.set(digest, { rawBytes, parsed, txId, issuer, storedAt: new Date().toISOString() });
+  // Defensive copy: caller may mutate their Buffer after calling storeReceipt
+  const frozenBytes = Buffer.from(rawBytes);
+  store.set(digest, { rawBytes: frozenBytes, parsed, txId, issuer, storedAt: new Date().toISOString() });
   if (typeof parsed.receipt_id === 'string') {
     if (!byReceiptId.has(parsed.receipt_id)) byReceiptId.set(parsed.receipt_id, new Set());
     byReceiptId.get(parsed.receipt_id).add(digest);
@@ -50,7 +52,10 @@ function storeReceipt(rawBytes) {
 }
 
 function getReceiptRaw(digest) {
-  return store.get(digest)?.rawBytes || null;
+  const entry = store.get(digest);
+  if (!entry) return null;
+  // Return a copy: caller may mutate the returned buffer
+  return Buffer.from(entry.rawBytes);
 }
 
 function queryByTx(txId) {
