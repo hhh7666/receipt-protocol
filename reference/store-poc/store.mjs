@@ -29,6 +29,7 @@ function digestObject(obj) {
 // ---- Store: digest -> { rawBytes, parsed, txId, issuer, storedAt } ----
 const store = new Map();
 const byTx = new Map();
+const byReceiptId = new Map();
 
 function storeReceipt(rawBytes) {
   const digest = sha256Hex(rawBytes);
@@ -39,6 +40,10 @@ function storeReceipt(rawBytes) {
   const txId = parsed.execution?.transaction_id || parsed.transaction_id || parsed.id || 'unknown';
 
   store.set(digest, { rawBytes, parsed, txId, issuer, storedAt: new Date().toISOString() });
+  if (typeof parsed.receipt_id === 'string') {
+    if (!byReceiptId.has(parsed.receipt_id)) byReceiptId.set(parsed.receipt_id, new Set());
+    byReceiptId.get(parsed.receipt_id).add(digest);
+  }
   if (!byTx.has(txId)) byTx.set(txId, new Set());
   byTx.get(txId).add(digest);
   return { digest, deduped: false, txId, issuer };
@@ -63,21 +68,34 @@ function getRelations(digest) {
 
   // Outgoing: this receipt references another
   if (r.admission?.receipt_id) {
-    const refDigest = r.admission.digest?.value;
-    let found = false, match = false;
-    for (const [d, e] of store) {
-      if (e.parsed.receipt_id === r.admission.receipt_id) {
-        found = true;
-        match = d === refDigest;
-        break;
-      }
+    const ref = r.admission;
+    const candidates = [...(byReceiptId.get(ref.receipt_id) || [])];
+    const found = candidates.length > 0;
+    const profile = ref.digest?.profile ?? ref.digest?.canonicalization ?? null;
+    const algorithm = ref.digest?.alg ?? ref.digest?.algorithm ?? null;
+    const value = ref.digest?.value;
+    // A source-protocol digest is NOT automatically the SHA-256 of stored raw bytes.
+    // Only explicitly declared raw-byte SHA-256 may be compared with our storage digest.
+    const rawBytesProfile = profile === 'raw-bytes' || profile === 'raw_bytes';
+    const supported = rawBytesProfile && (algorithm === 'sha256' || algorithm === 'SHA-256') &&
+      typeof value === 'string' && /^[a-fA-F0-9]{64}$/.test(value);
+    let status = 'not_assessed';
+    let match = null;
+    let reason = !found ? 'reference_not_found' : 'unsupported_digest_profile';
+    if (found && supported) {
+      match = candidates.some(d => d === value.toLowerCase());
+      status = match ? 'matched' : 'mismatch';
+      reason = match ? null : 'digest_mismatch';
     }
     related.push({
       direction: 'outgoing',
       relation: 'admission',
-      referenced_id: r.admission.receipt_id,
+      referenced_id: ref.receipt_id,
       reference_found: found,
+      candidate_count: candidates.length,
       digest_match: match,
+      binding_status: status,
+      reason,
       trust_assessed: false
     });
   }
