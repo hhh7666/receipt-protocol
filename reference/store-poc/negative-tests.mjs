@@ -1,72 +1,72 @@
-// Negative tests for Receipt Store
-import { storeReceipt, getReceiptRaw, getRelations } from './store.mjs';
-import { readFileSync } from 'node:fs';
+// Self-contained regression tests: no VATE checkout required.
+import { storeReceipt, getReceiptRaw, getRelations, queryByTx } from './store.mjs';
 import { createHash } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import assert from 'node:assert/strict';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const vateDir = process.env.VATE_SAMPLES_DIR || join(__dirname, '..', '..', '..', 'vate-test', 'examples', 'receipts');
-
-let pass = 0, fail = 0;
-function check(name, cond, detail) {
-  if (cond) { console.log(`  PASS: ${name}`); pass++; }
-  else { console.log(`  FAIL: ${name} — ${detail || ''}`); fail++; }
+let passed = 0;
+function test(name, fn) {
+  fn();
+  console.log('PASS:', name);
+  passed++;
 }
+const encode = obj => Buffer.from(JSON.stringify(obj));
+const sha = b => createHash('sha256').update(b).digest('hex');
+const rawRef = (id, digest) => ({
+  receipt_id: id, digest: { alg: 'sha256', profile: 'raw-bytes', value: digest }
+});
+const receipt = encode({ receipt_id: 'roundtrip', transaction_id: 'tx-1', payload: 'hello' });
+const { digest } = storeReceipt(receipt);
 
-console.log('=== Negative Tests ===\n');
+test('byte-preserving retrieval', () => assert.deepEqual(getReceiptRaw(digest), receipt));
+test('content-addressed digest', () => assert.equal(digest, sha(receipt)));
+test('transaction query', () => assert.ok(queryByTx('tx-1').some(x => x.digest === digest)));
+test('duplicate ingestion', () => assert.equal(storeReceipt(receipt).deduped, true));
 
-const raw = readFileSync(join(vateDir, 'post-execution-success.example.json'));
+const first = encode({ receipt_id: 'shared-id', payload: 'first' });
+const second = encode({ receipt_id: 'shared-id', payload: 'second' });
+storeReceipt(first);
+const secondDigest = storeReceipt(second).digest;
+const link = storeReceipt(encode({
+  receipt_id: 'link', admission: rawRef('shared-id', secondDigest)
+})).digest;
+test('multiple candidates resolve by digest, not insertion order', () => {
+  const r = getRelations(link).relations[0];
+  assert.equal(r.reference_found, true);
+  assert.equal(r.candidate_count, 2);
+  assert.equal(r.digest_match, true);
+  assert.equal(r.binding_status, 'matched');
+  assert.equal(r.trust_assessed, false);
+});
 
-// Test 1: Byte preservation
-console.log('Test 1: Byte preservation');
-{
-  const { digest } = storeReceipt(raw);
-  const retrieved = getReceiptRaw(digest);
-  check('raw bytes identical after store+retrieve', Buffer.compare(raw, retrieved) === 0);
-}
+const mismatch = storeReceipt(encode({
+  receipt_id: 'bad-link', admission: rawRef('shared-id', '0'.repeat(64))
+})).digest;
+test('explicit raw-byte mismatch', () => {
+  const r = getRelations(mismatch).relations[0];
+  assert.equal(r.binding_status, 'mismatch');
+  assert.equal(r.digest_match, false);
+});
 
-// Test 2: Digest mismatch
-console.log('\nTest 2: Digest mismatch');
-{
-  const receiptB = Buffer.from(JSON.stringify({ receipt_id: 'B-001', data: 'hello' }));
-  const digestB = createHash('sha256').update(receiptB).digest('hex');
-  
-  const receiptA = Buffer.from(JSON.stringify({
-    receipt_id: 'A-001',
-    admission: { receipt_id: 'B-001', digest: { value: '0'.repeat(64) } } // WRONG digest
-  }));
-  
-  storeReceipt(receiptB);
-  const { digest: digestA } = storeReceipt(receiptA);
-  
-  const rel = getRelations(digestA);
-  const ref = rel.relations[0];
-  check('reference found in store', ref.reference_found === true);
-  check('digest_match = false (tampered)', ref.digest_match === false);
-  check('trust_assessed = false', ref.trust_assessed === false);
-}
+const unknown = storeReceipt(encode({
+  receipt_id: 'unsupported-link',
+  admission: { receipt_id: 'shared-id', digest: { alg: 'sha256', value: secondDigest } }
+})).digest;
+test('undeclared source digest profile is not assessed', () => {
+  const r = getRelations(unknown).relations[0];
+  assert.equal(r.binding_status, 'not_assessed');
+  assert.equal(r.digest_match, null);
+  assert.equal(r.reason, 'unsupported_digest_profile');
+});
 
-// Test 3: Missing reference
-console.log('\nTest 3: Missing reference');
-{
-  const receipt = Buffer.from(JSON.stringify({
-    receipt_id: 'orphan',
-    admission: { receipt_id: 'does-not-exist', digest: { value: 'abc' } }
-  }));
-  const { digest } = storeReceipt(receipt);
-  const rel = getRelations(digest);
-  check('reference_found = false', rel.relations[0].reference_found === false);
-  check('digest_match = false', rel.relations[0].digest_match === false);
-}
+const missing = storeReceipt(encode({
+  receipt_id: 'missing-link', admission: rawRef('nonexistent-id', '0'.repeat(64))
+})).digest;
+test('missing reference is not assessed', () => {
+  const r = getRelations(missing).relations[0];
+  assert.equal(r.reference_found, false);
+  assert.equal(r.digest_match, null);
+  assert.equal(r.binding_status, 'not_assessed');
+});
 
-// Test 4: Duplicate ingestion
-console.log('\nTest 4: Duplicate ingestion');
-{
-  storeReceipt(raw);
-  const again = storeReceipt(raw);
-  check('same content returns deduped=true', again.deduped === true);
-}
-
-console.log(`\n=== ${pass} passed, ${fail} failed ===`);
-process.exit(fail > 0 ? 1 : 0);
+test('missing receipt returns null', () => assert.equal(getRelations('0'.repeat(64)), null));
+console.log(`All ${passed} tests passed`);
