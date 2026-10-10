@@ -1,6 +1,6 @@
-// Receipt Store / Resolve - minimal proof of concept
-// Generic receipt storage, query, and relation resolution
-// Does NOT sign, does NOT modify, does NOT decide trust
+// Receipt Store / Resolve — minimal format-agnostic POC
+// Stores receipts as opaque bytes, indexes them by content digest.
+// Does NOT sign, modify, or make trust decisions.
 
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -9,7 +9,12 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// ---- Digest computation (generic, works with any JSON) ----
+// ---- Digest: we hash the raw bytes as received, not a re-serialized object ----
+function sha256Hex(bytes) {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+// Canonical form for structured data (loose, POC-grade — not RFC 8785 JCS)
 function stableStringify(obj) {
   if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
   if (Array.isArray(obj)) return '[' + obj.map(stableStringify).join(',') + ']';
@@ -17,154 +22,92 @@ function stableStringify(obj) {
   return '{' + keys.map(k => JSON.stringify(k) + ':' + stableStringify(obj[k])).join(',') + '}';
 }
 
-function digestReceipt(receipt) {
-  const bytes = Buffer.from(stableStringify(receipt));
-  return 'sha256:' + createHash('sha256').update(bytes).digest('hex');
+function digestObject(obj) {
+  return sha256Hex(Buffer.from(stableStringify(obj)));
 }
 
-// ---- In-memory store ----
-const receipts = new Map(); // digest -> { receipt, issuer, stored_at }
-const byTransaction = new Map(); // transaction_id -> Set of digests
-const byIssuer = new Map(); // issuer_id -> Set of digests
+// ---- Store: digest -> { rawBytes, parsed, txId, issuer, storedAt } ----
+const store = new Map();
+const byTx = new Map();
 
-// ---- API operations (the 4 core endpoints) ----
+function storeReceipt(rawBytes) {
+  const digest = sha256Hex(rawBytes);
+  if (store.has(digest)) return { digest, deduped: true };
 
-// POST /receipts
-// Store an arbitrary receipt. We don't care about its format.
-// We compute its digest, preserve the original, and index it.
-function storeReceipt(receipt) {
-  const digest = digestReceipt(receipt);
-  const issuer = receipt.issuer?.id || receipt.actor || receipt.agent_id || 'unknown';
-  
-  // Extract transaction_id from wherever it lives
-  const txId = receipt.execution?.transaction_id 
-    || receipt.transaction_id 
-    || receipt.id 
-    || 'unknown';
-  
-  if (!receipts.has(digest)) {
-    receipts.set(digest, { receipt, issuer, txId, stored_at: new Date().toISOString() });
-    
-    // Index by transaction
-    if (!byTransaction.has(txId)) byTransaction.set(txId, new Set());
-    byTransaction.get(txId).add(digest);
-    
-    // Index by issuer
-    if (!byIssuer.has(issuer)) byIssuer.set(issuer, new Set());
-    byIssuer.get(issuer).add(digest);
-  }
-  
-  return { digest, txId, issuer, already_exists: receipts.get(digest).stored_at !== new Date().toISOString() };
+  const parsed = JSON.parse(rawBytes.toString('utf8'));
+  const issuer = parsed.issuer?.id || parsed.actor || parsed.agent_id || 'unknown';
+  const txId = parsed.execution?.transaction_id || parsed.transaction_id || parsed.id || 'unknown';
+
+  store.set(digest, { rawBytes, parsed, txId, issuer, storedAt: new Date().toISOString() });
+  if (!byTx.has(txId)) byTx.set(txId, new Set());
+  byTx.get(txId).add(digest);
+  return { digest, deduped: false, txId, issuer };
 }
 
-// GET /receipts/{digest}
-function getReceipt(digest) {
-  return receipts.get(digest)?.receipt || null;
+function getReceiptRaw(digest) {
+  return store.get(digest)?.rawBytes || null;
 }
 
-// GET /receipts?transaction_id=...
-function queryByTransaction(txId) {
-  const digests = byTransaction.get(txId) || new Set();
-  return [...digests].map(d => ({ digest: d, receipt: receipts.get(d).receipt }));
+function queryByTx(txId) {
+  return [...(byTx.get(txId) || [])].map(d => ({
+    digest: d,
+    parsed: store.get(d).parsed
+  }));
 }
 
-// GET /receipts/{digest}/relations
-// Find all receipts that reference this one, and all receipts this one references
 function getRelations(digest) {
-  const entry = receipts.get(digest);
+  const entry = store.get(digest);
   if (!entry) return null;
-  
   const related = [];
-  const receipt = entry.receipt;
-  
-  // Outgoing relations: things this receipt references
-  if (receipt.admission?.receipt_id) {
-    // Find the referenced admission receipt in our store
-    for (const [otherDigest, otherEntry] of receipts) {
-      if (otherEntry.receipt.receipt_id === receipt.admission.receipt_id) {
-        related.push({
-          direction: 'outgoing',
-          relation: 'admission',
-          digest: otherDigest,
-          receipt_id: receipt.admission.receipt_id,
-          digest_binding: receipt.admission.digest || null,
-          binding_verified: receipt.admission.digest 
-            ? otherDigest === 'sha256:' + receipt.admission.digest.value
-            : 'unknown'
-        });
+  const r = entry.parsed;
+
+  // Outgoing: this receipt references another
+  if (r.admission?.receipt_id) {
+    const refDigest = r.admission.digest?.value;
+    let found = false, match = false;
+    for (const [d, e] of store) {
+      if (e.parsed.receipt_id === r.admission.receipt_id) {
+        found = true;
+        match = d === refDigest;
+        break;
       }
     }
+    related.push({
+      direction: 'outgoing',
+      relation: 'admission',
+      referenced_id: r.admission.receipt_id,
+      reference_found: found,
+      digest_match: match,
+      trust_assessed: false
+    });
   }
-  
-  // Incoming relations: things that reference this receipt
-  const myReceiptId = receipt.receipt_id || receipt.id;
-  for (const [otherDigest, otherEntry] of receipts) {
-    if (otherDigest === digest) continue;
-    if (otherEntry.receipt.admission?.receipt_id === myReceiptId) {
-      related.push({
-        direction: 'incoming',
-        relation: 'referenced_by',
-        digest: otherDigest,
-        receipt_id: myReceiptId
-      });
-    }
-  }
-  
   return { digest, txId: entry.txId, issuer: entry.issuer, relations: related };
 }
 
-// ---- Test with VATE's actual sample receipts ----
-console.log('=== Testing Receipt Store with VATE samples ===\n');
+// ---- Demo: load VATE samples from a path passed as CLI arg ----
+const samplesDir = process.argv[2];
+if (samplesDir) {
+  const files = readdirSync(samplesDir).filter(f => f.endsWith('.json'));
+  let stored = 0;
+  for (const f of files) {
+    const raw = readFileSync(join(samplesDir, f));
+    storeReceipt(raw);
+    stored++;
+  }
+  console.log(`Loaded ${stored} receipts, ${store.size} unique digests`);
 
-const vateReceiptsDir = '/home/user/Doubao/chats/38443714734673922/vate-test/examples/receipts';
-const files = readdirSync(vateReceiptsDir).filter(f => f.endsWith('.json'));
+  // Show tx query
+  const txResults = queryByTx('txn-20260504-001');
+  console.log(`\nQuery txn-20260504-001: ${txResults.length} receipts`);
+  txResults.forEach(r => console.log(`  - ${r.parsed.receipt_id}`));
 
-console.log(`Loading ${files.length} VATE sample receipts...\n`);
-
-const stored = [];
-for (const file of files) {
-  const receipt = JSON.parse(readFileSync(join(vateReceiptsDir, file), 'utf8'));
-  const result = storeReceipt(receipt);
-  stored.push({ file, ...result });
-}
-
-console.log(`Stored ${receipts.size} unique receipts\n`);
-
-// Test 1: Retrieve by digest
-console.log('--- Test 1: GET /receipts/{digest} ---');
-const firstDigest = stored[0].digest;
-const retrieved = getReceipt(firstDigest);
-console.log(`Retrieved receipt: ${retrieved.receipt_id} (${retrieved.receipt_type})`);
-console.log(`Issuer: ${retrieved.issuer?.id}\n`);
-
-// Test 2: Query by transaction_id
-console.log('--- Test 2: GET /receipts?transaction_id=... ---');
-const txReceipts = queryByTransaction('txn-20260504-001');
-console.log(`Found ${txReceipts.length} receipts for txn-20260504-001:`);
-for (const r of txReceipts) {
-  console.log(`  - ${r.receipt.receipt_id} (${r.receipt.receipt_type})`);
-}
-console.log();
-
-// Test 3: Relations
-console.log('--- Test 3: GET /receipts/{digest}/relations ---');
-const postExecDigest = stored.find(s => s.file.includes('post-execution-success'))?.digest;
-if (postExecDigest) {
-  const rels = getRelations(postExecDigest);
-  console.log(`Relations for ${rels.receipt_id || 'receipt'}:`);
-  for (const r of rels.relations) {
-    console.log(`  - [${r.direction}] ${r.relation}: ${r.receipt_id}`);
-    if (r.binding_verified !== undefined) {
-      console.log(`    digest binding verified: ${r.binding_verified}`);
-    }
+  // Show relations
+  const postExec = [...store.values()].find(e => e.parsed.receipt_id === 'postrec-20260504-001');
+  if (postExec) {
+    const rel = getRelations([...store.entries()].find(([d,e]) => e === postExec)[0]);
+    console.log(`\nRelations for ${postExec.parsed.receipt_id}:`);
+    rel.relations.forEach(r => console.log(`  - [${r.direction}] ${r.relation}: ${r.referenced_id} (found=${r.reference_found}, match=${r.digest_match})`));
   }
 }
-console.log();
 
-// Test 4: What's unique about this vs a plain database?
-console.log('--- What makes this more than a database? ---');
-console.log('1. Content-addressed: receipts are indexed by their own digest, not an autoincrement ID');
-console.log('2. Digest binding verification: when receipt A references receipt B by digest, we can check if the stored B matches the referenced digest');
-console.log('3. Cross-source: we store VATE receipts, but the same API would work for our receipts or any other format');
-console.log('4. We never modify content: what you POST is what you GET back, byte-for-byte');
-console.log('5. We never decide trust: we return records and relations, the caller applies their own policy');
+export { storeReceipt, getReceiptRaw, queryByTx, getRelations, digestObject };

@@ -4,35 +4,49 @@ A minimal, format-agnostic receipt storage and resolution layer.
 
 ## What it does
 
-- `POST /receipts` — store an arbitrary receipt (any format)
-- `GET /receipts/{digest}` — retrieve by content digest
-- `GET /receipts?transaction_id=...` — query by transaction
-- `GET /receipts/{digest}/relations` — resolve links between receipts
+- Stores receipts as **opaque bytes**, indexed by SHA-256 content digest
+- Retrieves by digest (byte-for-byte identical)
+- Queries by transaction ID
+- Resolves links between receipts, checking digest bindings
 
-## What it does NOT do
+## What it explicitly does NOT do
 
 - Does not sign receipts
 - Does not modify receipt content
-- Does not decide trust (returns records, caller applies policy)
-- Does not verify signatures (that stays with the issuer/consumer)
+- Does not verify signatures
+- Does not decide trust — returns `reference_found` / `digest_match` / `trust_assessed` as separate dimensions
+
+## Quick start
+
+```bash
+node store.mjs /path/to/receipts/
+node negative-tests.mjs
+```
 
 ## Tested against
 
-- 63 VATE sample receipts (Poke-nushi/Verifiable-Agent-Trust-Envelope)
-- 4 negative test suites: byte preservation, digest mismatch, missing reference, duplicate ingestion
+- 63 VATE sample receipts from Poke-nushi/Verifiable-Agent-Trust-Envelope
+- 7 negative assertions across 4 test suites
 
 ## Status
 
 | Capability | Verified |
 |---|---|
-| Store arbitrary receipts | Yes |
-| Retrieve by digest | Yes |
+| Store opaque bytes, index by sha256 | Yes |
+| Byte-for-byte retrieval | Yes |
 | Query by transaction_id | Yes |
-| Resolve relations between receipts | Yes |
-| Digest binding check (reference matches stored) | Yes |
-| Detect digest mismatch | Yes |
+| Resolve outgoing references | Yes |
+| Detect digest mismatch (tampered reference) | Yes |
 | Handle missing references | Yes |
-| Deduplicate on ingestion | Yes |
+| Deduplicate identical content | Yes |
+| HTTP server / REST API | No — in-memory only |
 | Verify signatures | No — out of scope |
-| Make trust decisions | No — out of scope |
-| Cross-format relation semantics | Not yet tested |
+| Cross-format relation semantics | No — not yet tested |
+| RFC 8785 JCS canonicalization | No — loose POC-grade stringify |
+
+## Known limitations
+
+- In-memory only, no persistence
+- `stableStringify` is not RFC 8785 JCS (number edge cases, undefined handling)
+- Digest format: raw hex string (not `{alg, value}` object — VATE's format)
+- No HTTP layer yet

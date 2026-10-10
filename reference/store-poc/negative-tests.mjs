@@ -1,118 +1,72 @@
-// Negative tests for Receipt Store POC
-import { createHash } from 'node:crypto';
+// Negative tests for Receipt Store
+import { storeReceipt, getReceiptRaw, getRelations } from './store.mjs';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
-function stableStringify(obj) {
-  if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
-  if (Array.isArray(obj)) return '[' + obj.map(stableStringify).join(',') + ']';
-  const keys = Object.keys(obj).sort();
-  return '{' + keys.map(k => JSON.stringify(k) + ':' + stableStringify(obj[k])).join(',') + '}';
-}
-function digestReceipt(receipt) {
-  return 'sha256:' + createHash('sha256').update(Buffer.from(stableStringify(receipt))).digest('hex');
-}
-
-// Load a real VATE receipt as test data
-const vateDir = '/home/user/Doubao/chats/38443714734673922/vate-test/examples/receipts';
-const successReceipt = JSON.parse(readFileSync(`${vateDir}/post-execution-success.example.json`, 'utf8'));
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const vateDir = process.env.VATE_SAMPLES_DIR || join(__dirname, '..', '..', '..', 'vate-test', 'examples', 'receipts');
 
 let pass = 0, fail = 0;
-function check(name, condition, detail) {
-  if (condition) { console.log(`  PASS: ${name}`); pass++; }
-  else { console.log(`  FAIL: ${name} — ${detail}`); fail++; }
+function check(name, cond, detail) {
+  if (cond) { console.log(`  PASS: ${name}`); pass++; }
+  else { console.log(`  FAIL: ${name} — ${detail || ''}`); fail++; }
 }
 
 console.log('=== Negative Tests ===\n');
 
+const raw = readFileSync(join(vateDir, 'post-execution-success.example.json'));
+
 // Test 1: Byte preservation
-console.log('Test 1: Byte preservation (stored = retrieved)');
+console.log('Test 1: Byte preservation');
 {
-  const originalStr = JSON.stringify(successReceipt);
-  const originalDigest = digestReceipt(successReceipt);
-  
-  // Simulate store + retrieve
-  const stored = successReceipt; // we store the object
-  const retrieved = JSON.parse(JSON.stringify(stored)); // simulate serialization round-trip
-  const retrievedDigest = digestReceipt(retrieved);
-  
-  check('digest matches after round-trip', originalDigest === retrievedDigest, 
-    `${originalDigest} != ${retrievedDigest}`);
-  check('receipt_id preserved', successReceipt.receipt_id === retrieved.receipt_id);
-  check('nested field preserved', 
-    successReceipt.execution.transaction_id === retrieved.execution.transaction_id);
+  const { digest } = storeReceipt(raw);
+  const retrieved = getReceiptRaw(digest);
+  check('raw bytes identical after store+retrieve', Buffer.compare(raw, retrieved) === 0);
 }
 
 // Test 2: Digest mismatch
-console.log('\nTest 2: Digest mismatch detection');
+console.log('\nTest 2: Digest mismatch');
 {
-  // Receipt A references B with a digest
-  const receiptA = {
-    receipt_id: 'receipt-A',
-    admission: {
-      receipt_id: 'receipt-B',
-      digest: { alg: 'sha-256', value: '0000000000000000000000000000000000000000000000000000000000000000' }
-    }
-  };
+  const receiptB = Buffer.from(JSON.stringify({ receipt_id: 'B-001', data: 'hello' }));
+  const digestB = createHash('sha256').update(receiptB).digest('hex');
   
-  // Store B (real digest)
-  const receiptB = { receipt_id: 'receipt-B', issuer: 'did:example:bob' };
-  const realDigest = digestReceipt(receiptB);
-  const realHash = realDigest.replace('sha256:', '');
+  const receiptA = Buffer.from(JSON.stringify({
+    receipt_id: 'A-001',
+    admission: { receipt_id: 'B-001', digest: { value: '0'.repeat(64) } } // WRONG digest
+  }));
   
-  // The referenced digest is WRONG (all zeros)
-  const referencedHash = receiptA.admission.digest.value;
-  const matches = realHash === referencedHash;
+  storeReceipt(receiptB);
+  const { digest: digestA } = storeReceipt(receiptA);
   
-  check('detects digest mismatch', matches === false, 
-    `should not match: real=${realHash.slice(0,16)}... referenced=${referencedHash.slice(0,16)}...`);
-  
-  // Proper response format
-  const response = {
-    reference_found: true,
-    digest_match: matches,
-    trust_assessed: false
-  };
-  check('response format separates dimensions', 
-    response.digest_match === false && response.trust_assessed === false);
+  const rel = getRelations(digestA);
+  const ref = rel.relations[0];
+  check('reference found in store', ref.reference_found === true);
+  check('digest_match = false (tampered)', ref.digest_match === false);
+  check('trust_assessed = false', ref.trust_assessed === false);
 }
 
 // Test 3: Missing reference
 console.log('\nTest 3: Missing reference');
 {
-  const receiptA = {
-    receipt_id: 'receipt-A',
-    admission: {
-      receipt_id: 'nonexistent-receipt',
-      digest: { alg: 'sha-256', value: 'abc123' }
-    }
-  };
-  
-  // Try to find it in an empty store
-  const store = new Map();
-  const found = store.get(receiptA.admission.receipt_id);
-  
-  check('returns not found when reference missing', found === undefined);
-  check('must NOT return verified: true for missing reference', found === undefined);
+  const receipt = Buffer.from(JSON.stringify({
+    receipt_id: 'orphan',
+    admission: { receipt_id: 'does-not-exist', digest: { value: 'abc' } }
+  }));
+  const { digest } = storeReceipt(receipt);
+  const rel = getRelations(digest);
+  check('reference_found = false', rel.relations[0].reference_found === false);
+  check('digest_match = false', rel.relations[0].digest_match === false);
 }
 
 // Test 4: Duplicate ingestion
 console.log('\nTest 4: Duplicate ingestion');
 {
-  const store = new Map();
-  const digest1 = digestReceipt(successReceipt);
-  const digest2 = digestReceipt(JSON.parse(JSON.stringify(successReceipt))); // same content
-  
-  // First write
-  store.set(digest1, successReceipt);
-  const count1 = store.size;
-  
-  // Second write (same content)
-  if (!store.has(digest2)) store.set(digest2, successReceipt);
-  const count2 = store.size;
-  
-  check('same content = same digest', digest1 === digest2);
-  check('duplicate write does not create new entry', count1 === count2, 
-    `count went from ${count1} to ${count2}`);
+  storeReceipt(raw);
+  const again = storeReceipt(raw);
+  check('same content returns deduped=true', again.deduped === true);
 }
 
-console.log(`\n=== Results: ${pass} passed, ${fail} failed ===`);
+console.log(`\n=== ${pass} passed, ${fail} failed ===`);
+process.exit(fail > 0 ? 1 : 0);
