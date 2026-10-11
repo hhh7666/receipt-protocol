@@ -1,0 +1,17 @@
+{
+  "schema_version": "2.8",
+  "receipt_id": "rp-post-001",
+  "type": "post_execution",
+  "agent": "deploy-bot",
+  "action": "deploy",
+  "outcome": "claimed_success",
+  "executed_at": "2026-10-11T12:03:00Z",
+  "related_receipts": [
+    {
+      "id": "rp-adm-001",
+      "relationship": "admission"
+    }
+  ],
+  "issuer_pubkey": "ed25519:abc123",
+  "agent_signature": "sig_post_001"
+}

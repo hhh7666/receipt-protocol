@@ -104,6 +104,27 @@ function getRelations(digest) {
       trust_assessed: false
     });
   }
+  // Receipt Protocol v2.8: related_receipts array
+  if (Array.isArray(r.related_receipts)) {
+    for (const ref of r.related_receipts) {
+      if (!ref?.id) continue;
+      const candidates = [...(byReceiptId.get(ref.id) || [])];
+      const found = candidates.length > 0;
+      // v2.8 related_receipts doesn't carry a content digest; we resolve by receipt_id only.
+      // No digest binding is claimed — that stays with the consuming system.
+      related.push({
+        direction: 'outgoing',
+        relation: ref.relation || ref.relationship || 'unspecified',
+        referenced_id: ref.id,
+        reference_found: found,
+        candidate_count: candidates.length,
+        digest_match: null,
+        binding_status: found ? 'resolved_no_digest' : 'reference_not_found',
+        reason: found ? null : 'reference_not_found',
+        trust_assessed: false
+      });
+    }
+  }
   return { digest, txId: entry.txId, issuer: entry.issuer, relations: related };
 }
 
