@@ -9,6 +9,19 @@
 
 ---
 
+## What problem this solves
+
+When an autonomous agent says "I completed the task" or "I made the payment", you need evidence you can verify without trusting the agent. Receipt Protocol is the minimal layer for:
+
+- **Verifiable AI agents** — every agent claim gets an Ed25519-signed, tamper-evident **activity receipt**
+- **Agent audit trail & provenance** — ordered, portable receipts any third party can verify offline
+- **Cryptographic attestation for agents** — self-attested by default; third-party attestation and ledger anchoring are optional layers on the same format
+- **Runtime authorization & human oversight** — a reviewer or an escrow platform checks the receipt before releasing funds or approving a risky action
+- **Agent marketplaces & escrow** — portable proof that an agent actually did what it said, carried across platforms
+- Works with any action string — including **MCP tool calls**, A2A messages, and API transactions — without modifying the tool itself
+
+---
+
 ## Why this exists
 
 AI agents are starting to do real things — buy API credits, call tools, move money, submit work. But when an agent says "I completed the task" or "I made the payment", how do you know it's not hallucinating?
