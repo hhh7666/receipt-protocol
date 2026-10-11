@@ -113,25 +113,27 @@ function getRelations(digest) {
 
       // Optional content_digest binding: { algorithm: 'sha256', profile: 'raw-bytes', value: '...' }
       const cd = ref.content_digest;
-      const hasDigest = cd && typeof cd.value === 'string' &&
-        /^[a-fA-F0-9]{64}$/.test(cd.value);
-      const profile = cd?.profile ?? 'raw-bytes';
+      const hasField = Object.prototype.hasOwnProperty.call(ref, 'content_digest');
+      const validShape = cd && typeof cd === 'object' && !Array.isArray(cd) &&
+        typeof cd.value === 'string' && /^[a-fA-F0-9]{64}$/.test(cd.value);
+      const profile = cd?.profile;
       const algorithm = cd?.algorithm ?? cd?.alg;
 
       let match = null;
       let status = found ? 'resolved_no_digest' : 'reference_not_found';
       let reason = found ? null : 'reference_not_found';
 
-      if (found && hasDigest) {
-        // We are a content-addressed store: our lookup digest IS sha256(raw-bytes).
-        // Only verify when profile explicitly declares raw-bytes sha256.
-        if (profile === 'raw-bytes' && (algorithm === 'sha256' || algorithm === 'SHA-256')) {
+      if (hasField) {
+        if (!validShape) {
+          status = 'invalid_digest_format';
+          reason = 'content_digest must contain a 64-character hexadecimal value';
+        } else if (profile !== 'raw-bytes' || !['sha256', 'SHA-256'].includes(algorithm)) {
+          status = 'unsupported_digest_profile';
+          reason = 'explicit raw-bytes SHA-256 profile required';
+        } else if (found) {
           match = candidates.some(d => d === cd.value.toLowerCase());
           status = match ? 'digest_matched' : 'digest_mismatch';
           reason = match ? null : 'content_digest_mismatch';
-        } else {
-          status = 'unsupported_digest_profile';
-          reason = `profile=${profile} algo=${algorithm}`;
         }
       }
 
@@ -141,6 +143,7 @@ function getRelations(digest) {
         referenced_id: ref.id,
         reference_found: found,
         candidate_count: candidates.length,
+        id_unique: candidates.length === 1,
         digest_match: match,
         binding_status: status,
         reason,
