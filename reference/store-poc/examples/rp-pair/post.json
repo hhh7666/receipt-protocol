@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.8",
+  "schema_version": "2.9",
   "receipt_id": "rp-post-001",
   "type": "post_execution",
   "agent": "deploy-bot",
@@ -9,7 +9,12 @@
   "related_receipts": [
     {
       "id": "rp-adm-001",
-      "relationship": "admission"
+      "relationship": "admission",
+      "content_digest": {
+        "algorithm": "sha256",
+        "profile": "raw-bytes",
+        "value": "2e5a7b7a5913eff2be91de1b43f5c3ad2a015b4cd7f6d961e52c513cc338f9f4"
+      }
     }
   ],
   "issuer_pubkey": "ed25519:abc123",

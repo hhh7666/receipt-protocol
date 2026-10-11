@@ -104,23 +104,46 @@ function getRelations(digest) {
       trust_assessed: false
     });
   }
-  // Receipt Protocol v2.8: related_receipts array
+  // Receipt Protocol v2.9+: related_receipts array with optional content_digest
   if (Array.isArray(r.related_receipts)) {
     for (const ref of r.related_receipts) {
       if (!ref?.id) continue;
       const candidates = [...(byReceiptId.get(ref.id) || [])];
       const found = candidates.length > 0;
-      // v2.8 related_receipts doesn't carry a content digest; we resolve by receipt_id only.
-      // No digest binding is claimed — that stays with the consuming system.
+
+      // Optional content_digest binding: { algorithm: 'sha256', profile: 'raw-bytes', value: '...' }
+      const cd = ref.content_digest;
+      const hasDigest = cd && typeof cd.value === 'string' &&
+        /^[a-fA-F0-9]{64}$/.test(cd.value);
+      const profile = cd?.profile ?? 'raw-bytes';
+      const algorithm = cd?.algorithm ?? cd?.alg;
+
+      let match = null;
+      let status = found ? 'resolved_no_digest' : 'reference_not_found';
+      let reason = found ? null : 'reference_not_found';
+
+      if (found && hasDigest) {
+        // We are a content-addressed store: our lookup digest IS sha256(raw-bytes).
+        // Only verify when profile explicitly declares raw-bytes sha256.
+        if (profile === 'raw-bytes' && (algorithm === 'sha256' || algorithm === 'SHA-256')) {
+          match = candidates.some(d => d === cd.value.toLowerCase());
+          status = match ? 'digest_matched' : 'digest_mismatch';
+          reason = match ? null : 'content_digest_mismatch';
+        } else {
+          status = 'unsupported_digest_profile';
+          reason = `profile=${profile} algo=${algorithm}`;
+        }
+      }
+
       related.push({
         direction: 'outgoing',
         relation: ref.relation || ref.relationship || 'unspecified',
         referenced_id: ref.id,
         reference_found: found,
         candidate_count: candidates.length,
-        digest_match: null,
-        binding_status: found ? 'resolved_no_digest' : 'reference_not_found',
-        reason: found ? null : 'reference_not_found',
+        digest_match: match,
+        binding_status: status,
+        reason,
         trust_assessed: false
       });
     }
