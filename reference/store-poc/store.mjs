@@ -42,9 +42,11 @@ function storeReceipt(rawBytes) {
   // Defensive copy: caller may mutate their Buffer after calling storeReceipt
   const frozenBytes = Buffer.from(rawBytes);
   store.set(digest, { rawBytes: frozenBytes, parsed, txId, issuer, storedAt: new Date().toISOString() });
-  if (typeof parsed.receipt_id === 'string') {
-    if (!byReceiptId.has(parsed.receipt_id)) byReceiptId.set(parsed.receipt_id, new Set());
-    byReceiptId.get(parsed.receipt_id).add(digest);
+  // VATE uses receipt_id; Receipt Protocol v2.8 uses id. Index both,
+  // but never infer that a receipt ID alone establishes authorization.
+  for (const id of new Set([parsed.receipt_id, parsed.id].filter(v => typeof v === 'string' && v.length))) {
+    if (!byReceiptId.has(id)) byReceiptId.set(id, new Set());
+    byReceiptId.get(id).add(digest);
   }
   if (!byTx.has(txId)) byTx.set(txId, new Set());
   byTx.get(txId).add(digest);
@@ -103,6 +105,27 @@ function getRelations(digest) {
       reason,
       trust_assessed: false
     });
+  }
+  // Receipt Protocol v2.8: typed links, with an optional string digest.
+  // SPEC.md does not define the digest's byte/canonicalization profile,
+  // so presence can be resolved but cryptographic binding stays unassessed.
+  if (Array.isArray(r.related_receipts)) {
+    for (const ref of r.related_receipts) {
+      if (!ref || typeof ref.id !== 'string' || !ref.id) continue;
+      const candidates = [...(byReceiptId.get(ref.id) || [])];
+      const found = candidates.length > 0;
+      related.push({
+        direction: 'outgoing',
+        relation: typeof ref.relationship === 'string' ? ref.relationship : 'other',
+        referenced_id: ref.id,
+        reference_found: found,
+        candidate_count: candidates.length,
+        digest_match: null,
+        binding_status: 'not_assessed',
+        reason: found ? (ref.digest == null ? 'digest_not_provided' : 'digest_profile_unspecified') : 'reference_not_found',
+        trust_assessed: false
+      });
+    }
   }
   return { digest, txId: entry.txId, issuer: entry.issuer, relations: related };
 }
