@@ -58,3 +58,34 @@ test('unknown receipt cannot claim binding', () => {
   assert.equal(r.reference_found, false);
   assert.equal(r.binding_status, 'reference_not_found');
 });
+
+test('duplicate receipt IDs bind only the matching raw-byte candidate', () => {
+  const id = 'duplicate-' + (++n);
+  const first = storeReceipt(encode({ id, payload: 'first' }));
+  const second = storeReceipt(encode({ id, payload: 'second' }));
+  const good = storeReceipt(encode({ id: 'source-' + n, related_receipts: [
+    { id, content_digest: { algorithm: 'sha256', profile: 'raw-bytes', value: second.digest } }
+  ] }));
+  const matched = getRelations(good.digest).relations[0];
+  assert.equal(matched.candidate_count, 2);
+  assert.equal(matched.binding_status, 'digest_matched');
+  assert.equal(matched.digest_match, true);
+  const wrong = storeReceipt(encode({ id: 'source-wrong-' + n, related_receipts: [
+    { id, content_digest: { algorithm: 'sha256', profile: 'raw-bytes', value: digest } }
+  ] }));
+  const rejected = getRelations(wrong.digest).relations[0];
+  assert.equal(rejected.candidate_count, 2);
+  assert.equal(rejected.binding_status, 'digest_mismatch');
+  assert.equal(rejected.digest_match, false);
+});
+
+test('store preserves original bytes despite caller and retrieval buffer mutations', () => {
+  const raw = encode({ id: 'immutable-' + (++n), value: 'original' });
+  const original = Buffer.from(raw);
+  const saved = storeReceipt(raw);
+  raw.fill(0);
+  const retrieved = getReceiptRaw(saved.digest);
+  assert.deepEqual(retrieved, original);
+  retrieved.fill(0);
+  assert.deepEqual(getReceiptRaw(saved.digest), original);
+});
