@@ -22,6 +22,14 @@ func main() {
 	if err := os.MkdirAll(out, 0755); err != nil {
 		panic(err)
 	}
+	seed, _, _, err := receipt.GenerateKeyPair()
+	if err != nil {
+		panic(err)
+	}
+	if err := os.Setenv("SELO_SIGNING_KEY", seed); err != nil {
+		panic(err)
+	}
+	defer os.Unsetenv("SELO_SIGNING_KEY")
 	now := time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC)
 	r := receipt.ForgeReceipt{
 		ReceiptID:  "rp-selo-official-fixture-1",
