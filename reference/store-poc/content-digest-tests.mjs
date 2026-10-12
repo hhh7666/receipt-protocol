@@ -70,5 +70,45 @@ storeReceipt(admRaw);
     JSON.stringify(rel.relations[0]));
 }
 
+
+// Adversarial RP tests: malformed and ambiguous bindings must never gain trust.
+for (const [name, mutate, expected] of [
+  ['missing profile', cd => { delete cd.profile; }, 'unsupported_digest_profile'],
+  ['malformed digest', cd => { cd.value = 'not-a-sha256'; }, 'invalid_digest_format'],
+  ['unsupported algorithm', cd => { cd.algorithm = 'sha1'; }, 'unsupported_digest_profile']
+]) {
+  const post = JSON.parse(readFileSync(join(exDir, 'post.json'), 'utf8'));
+  mutate(post.related_receipts[0].content_digest);
+  post.receipt_id = 'adversarial-' + name;
+  const receipt = storeReceipt(Buffer.from(JSON.stringify(post)));
+  const relation = getRelations(receipt.digest).relations[0];
+  check(name + ' must not validate', relation.binding_status === expected &&
+    relation.digest_match === null && relation.trust_assessed === false,
+    JSON.stringify(relation));
+}
+
+// Duplicate IDs are explicitly ambiguous, even if one candidate digest matches.
+{
+  const admission = JSON.parse(admRaw.toString('utf8'));
+  admission.extra = 'second candidate with same receipt_id';
+  storeReceipt(Buffer.from(JSON.stringify(admission)));
+  const post = storeReceipt(readFileSync(join(exDir, 'post.json')));
+  const relation = getRelations(post.digest).relations[0];
+  check('duplicate receipt_id does not imply unique identity or trust',
+    relation.candidate_count >= 2 && relation.id_unique === false &&
+    relation.digest_match === true && relation.trust_assessed === false,
+    JSON.stringify(relation));
+}
+
+// Content digest basis is raw bytes, not sorted compact JSON.
+{
+  const obj = JSON.parse(admRaw.toString('utf8'));
+  const alternateBytes = Buffer.from(JSON.stringify(obj));
+  const alternateDigest = createHash('sha256').update(alternateBytes).digest('hex');
+  check('whitespace changes raw-byte digest (fixture dependent)',
+    alternateBytes.equals(admRaw) || alternateDigest !== admDigest,
+    'raw and reserialized digests unexpectedly identical');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
