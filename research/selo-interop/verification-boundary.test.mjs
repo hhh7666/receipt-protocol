@@ -6,7 +6,6 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 const harness = resolve('research/selo-interop/selo-roundtrip.mjs');
-const store = resolve('reference/store-poc/store.mjs');
 const goodHash = 'a'.repeat(64);
 const native = { receipt_id:'case-1', receipt_hash:goodHash, task_id:'case-1' };
 const statement = { _type:'https://in-toto.io/Statement/v1', predicateType:'https://selo.c1.run/attestation/v1',
@@ -27,7 +26,7 @@ for (const [name, mutate, expected] of cases) test(name, () => {
   const dir = mkdtempSync(join(tmpdir(),'rp-selo-contract-'));
   try {
     const nativeFile=join(dir,'native.json'), dsseFile=join(dir,'dsse.json');
-    const key=join(dir,'trusted.pub'), mock=join(dir,'mock.mjs');
+    const key=join(dir,'trusted.pub'), mock=join(dir,'mock.cjs');
     writeFileSync(nativeFile,JSON.stringify(native));
     writeFileSync(dsseFile,JSON.stringify({payloadType:'application/vnd.in-toto+json',
       payload:Buffer.from(JSON.stringify(statement)).toString('base64'),signatures:[{sig:'synthetic'}]}));
