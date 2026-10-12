@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Selo native + DSSE -> real Receipt Protocol Store API -> retrieval -> Selo verifier.
-// Node >=18. --native FILE --dsse FILE --selo BIN --pubkey TRUSTED_KEY [--out DIR]
+// Node >=18. --native FILE --dsse FILE --selo BIN --pubkey TRUSTED_KEY_FILE --pin-fingerprint HEX [--out DIR]
 // A harness PASS is not proof of Selo interoperability until run with authentic signed fixtures.
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { existsSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
@@ -15,10 +16,25 @@ for (let i = 0; i < argv.length; i += 2) {
   if (!argv[i].startsWith('--') || !argv[i + 1]) throw Error('Invalid option pair');
   opts[argv[i].slice(2)] = argv[i + 1];
 }
-for (const key of ['native', 'dsse', 'selo', 'pubkey'])
+for (const key of ['native', 'dsse', 'selo', 'pubkey', 'pin-fingerprint'])
   if (!opts[key]) throw Error('Required: --' + key);
 const out = resolve(opts.out || './selo-interop-output');
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+// An embedded receipt public key cannot establish signer identity. The
+// operator must provide BOTH trusted key material and a separately sourced pin.
+// This checks consistency only; it cannot authenticate the pin's origin.
+const pinnedFile = resolve(opts.pubkey);
+if (!existsSync(pinnedFile) || !statSync(pinnedFile).isFile())
+  throw Error('--pubkey must be an existing, separately supplied public-key file');
+const expectedFingerprint = opts['pin-fingerprint'].toLowerCase();
+if (!/^[a-f0-9]{64}$/.test(expectedFingerprint))
+  throw Error('--pin-fingerprint must be a 64-character SHA-256 hex fingerprint');
+const pinnedText = (await readFile(pinnedFile, 'utf8')).trim();
+const pinnedBytes = Buffer.from(pinnedText, 'base64');
+if (pinnedBytes.length !== 32 || pinnedBytes.toString('base64') !== pinnedText)
+  throw Error('--pubkey file must contain canonical base64 of a raw Ed25519 public key');
+if (sha(pinnedBytes) !== expectedFingerprint)
+  throw Error('out-of-band signer fingerprint does not match --pubkey file');
 
 // The existing store.mjs runs a CLI sample demo when process.argv[2] is set.
 // Suppress that CLI-only side effect while importing the UNMODIFIED real Store.
@@ -32,7 +48,7 @@ try {
 }
 
 function verify(path, expectedFormat) {
-  const run = spawnSync(opts.selo, ['verify', path, '--pubkey', opts.pubkey, '--json'],
+  const run = spawnSync(opts.selo, ['verify', path, '--pubkey', pinnedFile, '--json'],
     { encoding: 'utf8', timeout: 30000, maxBuffer: 1024 * 1024 });
   let result = null;
   try { result = JSON.parse(run.stdout); } catch { /* fail closed */ }
@@ -101,12 +117,14 @@ if (semantic.statement && Array.isArray(semantic.statement.subject) &&
 }
 
 const report = {
-  schema: 'selo-store-interop-v1',
+  schema: 'selo-store-interop-v2',
+  signer_pin: { key_file: pinnedFile, expected_fingerprint: expectedFingerprint,
+    verified: true, provenance: 'operator-supplied; source not independently attested' },
   source: 'Receipt Protocol reference/store-poc/store.mjs (actual API, not stub)',
   semantic: { pass: semantic.pass, reasons: semantic.reasons },
   negative, cases: [],
   limitations: [
-    'Signer pin must be independently obtained; embedded receipt key is not a trust anchor',
+    'Pin source must be independently authenticated by operator; CLI only checks file/fingerprint consistency',
     'Negative semantic controls are UNSIGNED; not a Selo re-signed attack test',
     'A mock verifier only tests harness control flow, not real Selo cryptography',
     'Selo verifies signatures; Store only preserves opaque bytes'
