@@ -1,4 +1,4 @@
-# Receipt Protocol v2.8
+# Receipt Protocol v2.9
 
 ## Abstract
 
@@ -64,12 +64,17 @@ Receipts can be linked to other receipts about the same action. This is optional
 
 Each entry in `related_receipts` has:
 - **id** — the ID of the related receipt
-- **digest** — optional content digest, to bind the link to the actual content
 - **relationship** — what kind of relationship this is:
   - `admission` — this receipt links to the admission decision that authorized the action
   - `outcome` — this receipt links to the observed outcome from the target system
   - `previous` — this receipt links to the previous step in a workflow
   - `other` — any other relationship
+- **content_digest** *(optional, v2.9+)* — object that cryptographically binds the link to the referenced receipt's bytes:
+  - `algorithm` — e.g. `"sha256"`
+  - `profile` — how the digest was computed. Currently only `"raw-bytes"` (SHA-256 of the receipt as stored, no canonicalization)
+  - `value` — the hex digest
+
+When `content_digest` is absent, the link is by ID only (`resolved_no_digest`). When present and profile=`raw-bytes`, a content-addressed store can verify the referenced bytes have not changed. This proves *which bytes* were referenced; it does not prove the admission was valid or the execution happened — those remain with the consuming system.
 
 ### Why we use a typed list instead of just parent_receipt_id
 
