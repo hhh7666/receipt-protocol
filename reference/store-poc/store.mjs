@@ -42,9 +42,9 @@ function storeReceipt(rawBytes) {
   // Defensive copy: caller may mutate their Buffer after calling storeReceipt
   const frozenBytes = Buffer.from(rawBytes);
   store.set(digest, { rawBytes: frozenBytes, parsed, txId, issuer, storedAt: new Date().toISOString() });
-  if (typeof parsed.receipt_id === 'string') {
-    if (!byReceiptId.has(parsed.receipt_id)) byReceiptId.set(parsed.receipt_id, new Set());
-    byReceiptId.get(parsed.receipt_id).add(digest);
+  for (const id of new Set([parsed.receipt_id, parsed.id].filter(v => typeof v === 'string' && v.length))) {
+    if (!byReceiptId.has(id)) byReceiptId.set(id, new Set());
+    byReceiptId.get(id).add(digest);
   }
   if (!byTx.has(txId)) byTx.set(txId, new Set());
   byTx.get(txId).add(digest);
