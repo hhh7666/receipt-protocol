@@ -61,7 +61,8 @@ function getReceiptRaw(digest) {
 function queryByTx(txId) {
   return [...(byTx.get(txId) || [])].map(d => ({
     digest: d,
-    parsed: store.get(d).parsed
+    // Return a detached snapshot; callers must not mutate relation evidence.
+    parsed: structuredClone(store.get(d).parsed)
   }));
 }
 
