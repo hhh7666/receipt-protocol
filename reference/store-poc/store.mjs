@@ -42,9 +42,9 @@ function storeReceipt(rawBytes) {
   // Defensive copy: caller may mutate their Buffer after calling storeReceipt
   const frozenBytes = Buffer.from(rawBytes);
   store.set(digest, { rawBytes: frozenBytes, parsed, txId, issuer, storedAt: new Date().toISOString() });
-  if (typeof parsed.receipt_id === 'string') {
-    if (!byReceiptId.has(parsed.receipt_id)) byReceiptId.set(parsed.receipt_id, new Set());
-    byReceiptId.get(parsed.receipt_id).add(digest);
+  for (const id of new Set([parsed.receipt_id, parsed.id].filter(v => typeof v === 'string' && v.length))) {
+    if (!byReceiptId.has(id)) byReceiptId.set(id, new Set());
+    byReceiptId.get(id).add(digest);
   }
   if (!byTx.has(txId)) byTx.set(txId, new Set());
   byTx.get(txId).add(digest);
@@ -61,7 +61,8 @@ function getReceiptRaw(digest) {
 function queryByTx(txId) {
   return [...(byTx.get(txId) || [])].map(d => ({
     digest: d,
-    parsed: store.get(d).parsed
+    // Return a detached snapshot; callers must not mutate relation evidence.
+    parsed: structuredClone(store.get(d).parsed)
   }));
 }
 
@@ -112,26 +113,30 @@ function getRelations(digest) {
       const found = candidates.length > 0;
 
       // Optional content_digest binding: { algorithm: 'sha256', profile: 'raw-bytes', value: '...' }
+      const hasContentDigest = Object.hasOwn(ref, 'content_digest');
       const cd = ref.content_digest;
-      const hasDigest = cd && typeof cd.value === 'string' &&
-        /^[a-fA-F0-9]{64}$/.test(cd.value);
-      const profile = cd?.profile ?? 'raw-bytes';
+      const wellFormed = cd && typeof cd === 'object' && !Array.isArray(cd) &&
+        typeof cd.value === 'string' && /^[a-fA-F0-9]{64}$/.test(cd.value);
+      const profile = cd?.profile;
       const algorithm = cd?.algorithm ?? cd?.alg;
 
       let match = null;
       let status = found ? 'resolved_no_digest' : 'reference_not_found';
       let reason = found ? null : 'reference_not_found';
 
-      if (found && hasDigest) {
-        // We are a content-addressed store: our lookup digest IS sha256(raw-bytes).
-        // Only verify when profile explicitly declares raw-bytes sha256.
-        if (profile === 'raw-bytes' && (algorithm === 'sha256' || algorithm === 'SHA-256')) {
+      if (found && hasContentDigest) {
+        if (!wellFormed) {
+          status = 'invalid_content_digest';
+          reason = 'malformed_content_digest';
+        } else if (profile !== 'raw-bytes' || (algorithm !== 'sha256' && algorithm !== 'SHA-256')) {
+          // Missing profile is not evidence that the author intended raw bytes.
+          status = 'unsupported_digest_profile';
+          reason = `profile=${profile} algo=${algorithm}`;
+        } else {
+          // Only an explicitly declared raw-byte SHA-256 binds our storage digest.
           match = candidates.some(d => d === cd.value.toLowerCase());
           status = match ? 'digest_matched' : 'digest_mismatch';
           reason = match ? null : 'content_digest_mismatch';
-        } else {
-          status = 'unsupported_digest_profile';
-          reason = `profile=${profile} algo=${algorithm}`;
         }
       }
 
