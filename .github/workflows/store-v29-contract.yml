@@ -1,0 +1,24 @@
+name: Store v2.9 contract
+
+on:
+  pull_request:
+    paths:
+      - 'reference/store-poc/store.mjs'
+      - 'reference/store-poc/store-v29-contract.test.mjs'
+      - '.github/workflows/store-v29-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run Store v2.9 contract
+        run: node --test reference/store-poc/store-v29-contract.test.mjs
