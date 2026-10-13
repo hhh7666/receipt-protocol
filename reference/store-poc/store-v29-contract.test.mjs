@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 const saved = process.argv[2]; process.argv[2] = '';
-const { storeReceipt, getReceiptRaw, getRelations } = await import('./store.mjs');
+const { storeReceipt, getReceiptRaw, getRelations, queryByTx } = await import('./store.mjs');
 process.argv[2] = saved;
 const encode = x => Buffer.from(JSON.stringify(x));
 let n = 0;
@@ -88,4 +88,19 @@ test('store preserves original bytes despite caller and retrieval buffer mutatio
   assert.deepEqual(retrieved, original);
   retrieved.fill(0);
   assert.deepEqual(getReceiptRaw(saved.digest), original);
+});
+
+test('transaction queries cannot mutate stored relation evidence', () => {
+  const id = 'query-mutation-' + (++n);
+  const target = storeReceipt(encode({ id: 'query-target-' + n }));
+  const source = storeReceipt(encode({ id, transaction_id: 'tx-' + n,
+    related_receipts: [{ id: 'query-target-' + n,
+      content_digest: { algorithm: 'sha256', profile: 'raw-bytes', value: target.digest } }] }));
+  const before = getRelations(source.digest);
+  assert.equal(before.relations[0].binding_status, 'digest_matched');
+  const queried = queryByTx('tx-' + n)[0].parsed;
+  queried.related_receipts[0].content_digest.value = '0'.repeat(64);
+  queried.related_receipts.push({ id: 'forged' });
+  assert.deepEqual(getRelations(source.digest), before);
+  assert.equal(queryByTx('tx-' + n)[0].parsed.related_receipts.length, 1);
 });
